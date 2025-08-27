@@ -19,22 +19,27 @@ class AuthenticatedSessionController extends Controller
 
     // Handle login POST
     public function store(LoginRequest $request)
-    {
-        $request->authenticate();
+{
+    $request->authenticate();
+    $user = Auth::user();
 
-        $request->session()->regenerate();
-
-        // Redirect based on role
-        $user = Auth::user();
-
-        if ($user->role === 'admin') {
-            return redirect()->route('admin.users');
-        } elseif ($user->role === 'employee') {
-            return redirect()->route('dashboard'); // Or your employee route
-        } else { // customer
-            return redirect()->route('dashboard'); // Or your customer route
-        }
+    // Check if user is blocked
+    if ($user->status === 'blocked') {
+        Auth::logout();
+        return redirect('/')->with('blocked', 'Your account has been blocked. Contact admin.');
     }
+
+    $request->session()->regenerate();
+
+    // Redirect based on role
+    if ($user->role === 'admin') {
+        return redirect()->route('admin.users');
+    } elseif ($user->role === 'employee') {
+        return redirect()->route('dashboard'); // employee route
+    } else {
+        return redirect()->route('dashboard'); // customer route
+    }
+}
 
     // Handle logout
     public function destroy(Request $request)
@@ -47,4 +52,7 @@ class AuthenticatedSessionController extends Controller
 
         return redirect('/');
     }
+
+    
+    
 }

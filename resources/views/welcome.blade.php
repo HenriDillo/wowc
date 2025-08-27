@@ -20,7 +20,15 @@
 </head>
 
 <body class="bg-white overflow-x-hidden">
-
+  @if(session('blocked'))
+          <div class="fixed inset-0 flex items-center justify-center z-50 bg-black/50">
+              <div class="bg-white p-6 rounded-lg text-center shadow-lg">
+                  <h2 class="text-xl font-semibold text-red-600 mb-4">Access Blocked</h2>
+                  <p>{{ session('blocked') }}</p>
+                  <a href="{{ route('login') }}" class="mt-4 inline-block px-4 py-2 bg-[#c49b6e] text-white rounded-lg">Go to Login</a>
+              </div>
+          </div>
+      @endif
   <!-- Navbar -->
   <nav class="fixed top-0 left-0 w-full z-50 px-6 md:px-16 py-4 flex justify-between items-center bg-white shadow-md">
     

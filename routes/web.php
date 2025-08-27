@@ -12,6 +12,10 @@ Route::get('/', function () {
 Route::get('/dashboard', function () {
     $user = Auth::user();
 
+    if ($user->status === 'blocked') {
+        Auth::logout();
+        return redirect('/')->with('blocked', 'Your account has been blocked. Contact admin.');
+    }
     if ($user->role === 'admin') {
         return redirect()->route('admin.users');
     } elseif ($user->role === 'employee') {
@@ -28,11 +32,11 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [\App\Http\Controllers\ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-// Admin routes
+// Admin routes (only admins allowed)
 Route::middleware(['auth'])->group(function() {
     Route::get('/admin/users', [AdminUserController::class, 'index'])->name('admin.users');
-    Route::put('/users/{user}', [AdminUserController::class, 'updateRole'])->name('users.updateRole');
-    Route::patch('/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('users.toggleStatus');
+    Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole'])->name('admin.users.updateRole');
+    Route::patch('/admin/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('admin.users.toggleStatus');
 });
 
 require __DIR__.'/auth.php';
