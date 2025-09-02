@@ -4,7 +4,7 @@
 
         <!-- ========== LEFT PANEL (Background + Welcome Text) ========== -->
         <div class="w-full lg:w-1/2 hidden lg:flex items-center justify-center bg-cover bg-center relative"
-             style="background-image: url('{{ asset('images/register-bg.jpg') }}');">
+             style="background-image: url('{{ asset('images/login-bg.jpg') }}');">
 
             <!-- Optional overlay for readability -->
             <div class="absolute inset-0 bg-[#A9793E] bg-opacity-50"></div>
