@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $title ?? 'Employee Dashboard' }}</title>
+    <title>@yield('page_title', 'Employee Dashboard')</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>[x-cloak]{ display: none !important; }</style>
@@ -17,12 +17,11 @@
             <span class="text-white font-semibold text-lg">Wow Carmen</span>
         </div>
         <nav class="flex-1 p-4 space-y-1">
-            <div class="flex items-center space-x-3 p-3 text-white bg-[#b08a5c] rounded-lg">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 2l8 6v9a1 1 0 01-1 1h-5v-5H8v5H3a1 1 0 01-1-1V8l8-6z"></path>
-                </svg>
+            <a href="{{ route('dashboard') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2l8 6v10a1 1 0 01-1 1h-5v-6H8v6H3a1 1 0 01-1-1V8l8-6z"></path></svg>
                 <span class="font-medium">Dashboard</span>
-            </div>
+            </a>
+            
             <a href="{{ route('employee.raw-materials') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M4 3h12a1 1 0 011 1v3H3V4a1 1 0 011-1z"></path>
@@ -43,51 +42,29 @@
     <div class="flex-1 bg-white">
         <!-- Header -->
         <div class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-            <h1 class="text-2xl font-semibold text-gray-800">Employee Dashboard</h1>
+            <h1 class="text-2xl font-semibold text-gray-800">@yield('page_title', 'Employee Dashboard')</h1>
             <div class="relative">
                 <button @click="dropdownOpen = !dropdownOpen" class="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
                     <span>Hello, {{ Auth::user()->name ?? 'Employee' }}</span>
                     <div class="w-8 h-8 bg-gray-300 rounded-full"></div>
                 </button>
                 <div x-show="dropdownOpen" x-cloak x-transition @click.outside="dropdownOpen=false" class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                    <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
-                        Profile
-                    </a>
-                    <form action="{{ route('logout') }}" method="POST">
-                        @csrf
+                    <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Profile</a>
+                    <form action="{{ route('logout') }}" method="POST">@csrf
                         <button type="submit" class="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg">Log Out</button>
                     </form>
                 </div>
             </div>
         </div>
 
-        <!-- Dashboard Content -->
-        <div class="p-6 space-y-10">
-            <!-- Stats Cards -->
-            <div class="border rounded-xl p-4 md:p-6">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="bg-white border rounded-lg p-4">
-                        <div class="text-sm text-gray-600 mb-2 border-b pb-2">Total Products</div>
-                        <div class="text-4xl font-semibold text-gray-900">{{ $totalProducts ?? 0 }}</div>
-                    </div>
-                    <div class="bg-white border rounded-lg p-4">
-                        <div class="text-sm text-gray-600 mb-2 border-b pb-2">Low Stock</div>
-                        <div class="text-4xl font-semibold text-red-500">{{ $lowStockCount ?? 0 }}</div>
-                    </div>
-                    <div class="bg-white border rounded-lg p-4">
-                        <div class="text-sm text-gray-600 mb-2 border-b pb-2">Total Orders Today</div>
-                        <div class="text-4xl font-semibold text-green-600">{{ $ordersToday ?? 0 }}</div>
-                    </div>
-                    <div class="bg-white border rounded-lg p-4">
-                        <div class="text-sm text-gray-600 mb-2 border-b pb-2">Stock In Today</div>
-                        <div class="text-4xl font-semibold text-yellow-500">{{ $stockInToday ?? 0 }}</div>
-                    </div>
-                </div>
-            </div>
-
+        <!-- Page Content -->
+        <div class="p-6">
+            @yield('content')
         </div>
     </div>
 </div>
 
 </body>
 </html>
+
+
