@@ -11,8 +11,10 @@ return new class extends Migration
         Schema::create('materials', function (Blueprint $table) {
             $table->id();
             $table->string('name')->unique();
-            $table->unsignedInteger('stock')->default(0);
-            $table->decimal('price', 10, 2)->default(0);
+            $table->decimal('quantity', 10, 2)->default(0);
+            $table->string('unit');
+            $table->enum('status', ['Available', 'Low Stock', 'Out of Stock'])->default('Available');
+            $table->boolean('is_hidden')->default(false);
             $table->timestamps();
         });
     }
@@ -22,5 +24,3 @@ return new class extends Migration
         Schema::dropIfExists('materials');
     }
 };
-
-

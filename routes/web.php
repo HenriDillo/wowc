@@ -42,7 +42,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/employee/raw-materials', [MaterialController::class, 'index'])->name('employee.raw-materials');
     Route::post('/employee/raw-materials', [MaterialController::class, 'store'])->name('employee.materials.store');
     Route::put('/employee/raw-materials/{material}', [MaterialController::class, 'update'])->name('employee.materials.update');
-    Route::patch('/employee/raw-materials/{material}/toggle', [MaterialController::class, 'toggleVisibility'])->name('employee.materials.toggle');
+    Route::patch('/employee/raw-materials/{material}/hide', [MaterialController::class, 'hide'])->name('employee.materials.hide');
+Route::patch('/employee/raw-materials/{material}/unhide', [MaterialController::class, 'unhide'])->name('employee.materials.unhide');
 
     Route::get('/employee/items', [ItemController::class, 'index'])->name('employee.items');
     Route::post('/employee/items', [ItemController::class, 'store'])->name('employee.items.store');
