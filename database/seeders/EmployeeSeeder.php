@@ -18,6 +18,8 @@ class EmployeeSeeder extends Seeder
             'name' => 'John Doe',
             'email' => 'john.doe@example.com',
             'password' => Hash::make('password123'), // default password
+            'address' => '123 Main St, Anytown, USA',
+            'contact_number' => '1234567890',
             'role' => 'employee',
             'status' => 'active', // make sure you have added the status column
         ]);
@@ -26,12 +28,16 @@ class EmployeeSeeder extends Seeder
             'name' => 'Jane Smith',
             'email' => 'jane.smith@example.com',
             'password' => Hash::make('password123'),
+            'address' => '123 Main St, Anytown, USA',
+            'contact_number' => '1234567890',
             'role' => 'employee',
             'status' => 'active',
         ]);
 
         // Optionally, create more employees using a factory
         User::factory(3)->create([
+            'address' => '123 Main St, Anytown, USA',
+            'contact_number' => '1234567890',
             'role' => 'employee',
             'status' => 'active',
         ]);

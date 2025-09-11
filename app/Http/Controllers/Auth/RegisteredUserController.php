@@ -23,6 +23,8 @@ class RegisteredUserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Password::defaults()],
+            'address' => ['required', 'string', 'max:500'],
+            'contact_number' => ['required', 'regex:/^(\+639|09)\d{9}$/'],
         ]);
 
         // Create user with default role "customer"
@@ -31,6 +33,8 @@ class RegisteredUserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'customer', // default role
+            'address' => $request->address,
+            'contact_number' => $request->contact_number,
         ]);
 
         event(new Registered($user));

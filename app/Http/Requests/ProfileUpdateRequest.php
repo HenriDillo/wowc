@@ -25,6 +25,8 @@ class ProfileUpdateRequest extends FormRequest
                 'max:255',
                 Rule::unique(User::class)->ignore($this->user()->id),
             ],
+            'address' => ['required', 'string', 'max:500'],
+            'contact_number' => ['required', 'regex:/^(\+639|09)\d{9}$/'],
         ];
     }
 }

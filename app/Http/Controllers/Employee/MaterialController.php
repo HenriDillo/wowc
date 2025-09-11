@@ -25,13 +25,18 @@ class MaterialController extends Controller
     // Store new material
     public function store(Request $request)
     {
-        $data = $request->validate([
+        $data = $request->validateWithBag('createMaterial', [
             'name' => 'required|string|max:255|unique:materials,name',
-            'quantity' => 'required|numeric|min:0',
             'unit' => 'required|string|max:50',
+        ], [
+            'name.unique' => 'Material name already exists.',
         ]);
 
-        $material = Material::create($data);
+        $material = Material::create([
+            'name' => $data['name'],
+            'unit' => $data['unit'],
+            'quantity' => 0,
+        ]);
 
         // Optional: automatically update status
         $material->updateStatus();
@@ -42,13 +47,33 @@ class MaterialController extends Controller
     // Update existing material
     public function update(Request $request, Material $material)
     {
-        $data = $request->validate([
+        // Branch for Add Quantity action
+        if ($request->input('mode') === 'add_quantity') {
+            $bag = 'addQty_' . $material->id;
+            $data = $request->validateWithBag($bag, [
+                'add_quantity' => 'required|numeric|min:1',
+            ]);
+
+            $material->quantity = (float) $material->quantity + (float) $data['add_quantity'];
+            $material->save();
+            $material->updateStatus();
+
+            return back()->with('status', 'Quantity updated');
+        }
+
+        // Default edit flow: only name and unit are editable
+        $bag = 'edit_' . $material->id;
+        $data = $request->validateWithBag($bag, [
             'name' => 'required|string|max:255|unique:materials,name,' . $material->id,
-            'quantity' => 'required|numeric|min:0',
             'unit' => 'required|string|max:50',
+        ], [
+            'name.unique' => 'Material name already exists.',
         ]);
 
-        $material->update($data);
+        $material->update([
+            'name' => $data['name'],
+            'unit' => $data['unit'],
+        ]);
 
         // Optional: automatically update status
         $material->updateStatus();
@@ -59,8 +84,13 @@ class MaterialController extends Controller
     // Hide material
     public function hide(Material $material)
     {
-        $material->is_hidden = true;
-        $material->save();
+        try {
+            $material->is_hidden = true;
+            $material->save();
+        } catch (\Throwable $e) {
+            $bag = 'hide_' . $material->id;
+            return back()->withErrors(['hide' => 'Failed to hide material. Please try again.'], $bag);
+        }
 
         return back()->with('status', 'Material hidden');
     }
