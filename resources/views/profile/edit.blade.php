@@ -1,40 +1,35 @@
-<x-app-layout>
-    <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="h-10 w-10 rounded-full bg-[#A9793E]/10 flex items-center justify-center">
-                    <svg class="h-5 w-5 text-[#A9793E]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                        <circle cx="12" cy="7" r="4"/>
-                    </svg>
-                </div>
-                <div>
-                    <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('Profile') }}</h2>
-                    <p class="text-sm text-gray-600">Manage your personal information and account security.</p>
-                </div>
-            </div>
-        </div>
-    </x-slot>
-
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>[x-cloak]{ display: none !important; }</style>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div class="py-6">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
             <div>
                 <button type="button" onclick="history.back()"
-                    class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg shadow">
+                    class="inline-flex items-center gap-2 bg-[#c49b6e] text-white px-4 py-2 rounded-lg shadow hover:bg-[#b08a5c]">
                     Back
                 </button>
             </div>
-            <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
+            <div class="bg-white border border-gray-200 sm:rounded-xl shadow-sm p-4 sm:p-8">
                 <div class="max-w-xl">
                     @include('profile.partials.update-profile-information-form')
                 </div>
             </div>
 
-            <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
+            <div class="bg-white border border-gray-200 sm:rounded-xl shadow-sm p-4 sm:p-8">
                 <div class="max-w-xl">
                     @include('profile.partials.update-password-form')
                 </div>
             </div>
         </div>
     </div>
-</x-app-layout>
+</body>
+</html>
