@@ -11,9 +11,7 @@ class Material extends Model
 
     protected $fillable = [
         'name',
-        'quantity',  
         'unit',        
-        'status',     
         'is_hidden',   
     ];
 
@@ -21,16 +19,5 @@ class Material extends Model
         'is_hidden' => 'boolean',
     ];
 
-    // Optional: automatically update status based on quantity
-    public function updateStatus()
-    {
-        if ($this->quantity <= 0) {
-            $this->status = 'Out of Stock';
-        } elseif ($this->quantity <= 5) { // example threshold
-            $this->status = 'Low Stock';
-        } else {
-            $this->status = 'Available';
-        }
-        $this->save();
-    }
+    // No stock/quantity tracking anymore
 }

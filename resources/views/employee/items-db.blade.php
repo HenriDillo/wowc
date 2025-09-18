@@ -4,11 +4,20 @@
 
 @section('content')
 
+    @php($editOpenId = null)
+    @isset($visibleItems)
+        @foreach($visibleItems as $vi)
+            @if($errors->getBag('edit_' . $vi->id)->any())
+                @php($editOpenId = $vi->id)
+                @break
+            @endif
+        @endforeach
+    @endisset
+
     <div x-data="{ 
-        openAdd:false, 
-        editId:null, 
+        openAdd: {{ $errors->getBag('createItem')->any() ? 'true' : 'false' }}, 
+        editId: {{ $editOpenId ? $editOpenId : 'null' }}, 
         search:'{{ $search ?? '' }}', 
-        visibility:'{{ $visibility ?? 'all' }}', 
         sLower:'',
         lightboxOpen: false,
         lightboxImages: [],
@@ -29,18 +38,10 @@
                             <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z" /></svg>
                         </span>
                         <form method="GET" action="{{ route('employee.items') }}">
-                            <input type="hidden" name="visibility" :value="visibility">
                             <input name="search" x-model="search" placeholder="Search name or category..." class="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c49b6e]" @change="$el.form.submit()" />
                         </form>
                     </div>
-                    <form method="GET" action="{{ route('employee.items') }}" class="flex items-center gap-2">
-                        <input type="hidden" name="search" :value="search">
-                        <select name="visibility" x-model="visibility" class="border rounded-lg px-3 py-2 text-sm" @change="$el.form.submit()">
-                            <option value="all">All</option>
-                            <option value="visible">Visible</option>
-                            <option value="hidden">Hidden</option>
-                        </select>
-                    </form>
+                    
                     <button @click="openAdd = true" class="inline-flex items-center gap-2 bg-[#c49b6e] text-white text-sm px-3 py-2 rounded-lg hover:bg-[#b08a5c]">
                         <span class="text-lg leading-none">+</span>
                         <span>Add Item</span>
@@ -61,7 +62,7 @@
                         </tr>
                     </thead>
                     <tbody class="bg-white">
-                        @foreach($items as $i)
+                        @foreach($visibleItems as $i)
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-3 border-b text-sm text-gray-900">{{ $i->name }}</td>
                             <td class="px-4 py-3 border-b text-sm text-gray-700">{{ $i->category }}</td>
@@ -71,8 +72,8 @@
                                     @if($i->photos->count() > 0)
                                         @foreach($i->photos->take(3) as $index => $p)
                                             <div class="relative group cursor-pointer" 
-                                                 @click="lightboxImages = {{ $i->photos->pluck('path')->map(fn($path) => Storage::url($path))->toJson() }}; lightboxIndex = {{ $index }}; lightboxOpen = true">
-                                                <img src="{{ Storage::url($p->path) }}" alt="photo" class="h-12 w-12 object-cover rounded-lg border-2 border-gray-200 hover:border-[#c49b6e] transition-all duration-200 shadow-sm hover:shadow-md" />
+                                                 @click="lightboxImages = {{ $i->photos->pluck('path')->map(fn($path) => asset('storage/' . $path))->toJson() }}; lightboxIndex = {{ $index }}; lightboxOpen = true">
+                                                <img src="{{ asset('storage/' . $p->path) }}" alt="Item Photo" class="w-[60px] h-[60px] object-cover rounded-lg border border-gray-300 hover:border-[#c49b6e] transition-all duration-200 shadow-sm hover:shadow-md" />
                                                 <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-lg transition-all duration-200 flex items-center justify-center">
                                                     <svg class="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path>
@@ -81,12 +82,12 @@
                                             </div>
                                         @endforeach
                                         @if($i->photos->count() > 3)
-                                            <div class="h-12 w-12 bg-gray-100 rounded-lg border-2 border-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">
+                                            <div class="w-[60px] h-[60px] bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-xs font-medium text-gray-600">
                                                 +{{ $i->photos->count() - 3 }}
                                             </div>
                                         @endif
                                     @else
-                                        <div class="h-12 w-12 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+                                        <div class="w-[60px] h-[60px] bg-gray-100 rounded-lg border border-dashed border-gray-300 flex items-center justify-center">
                                             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                             </svg>
@@ -127,12 +128,39 @@
                                     @csrf
                                     @method('PUT')
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <input type="text" name="name" value="{{ $i->name }}" class="w-full border rounded px-3 py-2" required>
-                                        <input type="text" name="category" value="{{ $i->category }}" class="w-full border rounded px-3 py-2" required>
+                                        <div>
+                                            <input type="text" name="name" value="{{ old('name', $i->name) }}" class="w-full border rounded px-3 py-2" required>
+                                            @php($bag = 'edit_' . $i->id)
+                                            @if($errors->getBag($bag)->has('name'))
+                                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('name') }}</p>
+                                            @endif
+                                        </div>
+                                        <div>
+                                            @php($currentCat = old('category', $i->category))
+                                            <select name="category" class="w-full border rounded px-3 py-2" required>
+                                                <option value="Caddy" {{ $currentCat === 'Caddy' ? 'selected' : '' }}>Caddy</option>
+                                                <option value="Carpet" {{ $currentCat === 'Carpet' ? 'selected' : '' }}>Carpet</option>
+                                                <option value="Placemat" {{ $currentCat === 'Placemat' ? 'selected' : '' }}>Placemat</option>
+                                                <option value="Others" {{ $currentCat === 'Others' ? 'selected' : '' }}>Others</option>
+                                            </select>
+                                            @if($errors->getBag($bag)->has('category'))
+                                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('category') }}</p>
+                                            @endif
+                                        </div>
                                     </div>
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <input type="number" step="0.01" name="price" value="{{ $i->price }}" class="w-full border rounded px-3 py-2" required>
-                                        <input type="text" name="description" value="{{ $i->description }}" class="w-full border rounded px-3 py-2" placeholder="Description (optional)">
+                                        <div>
+                                            <input type="number" step="0.01" name="price" value="{{ old('price', $i->price) }}" class="w-full border rounded px-3 py-2" required>
+                                            @if($errors->getBag($bag)->has('price'))
+                                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('price') }}</p>
+                                            @endif
+                                        </div>
+                                        <div>
+                                            <input type="text" name="description" value="{{ old('description', $i->description) }}" class="w-full border rounded px-3 py-2" placeholder="Description (optional)">
+                                            @if($errors->getBag($bag)->has('description'))
+                                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('description') }}</p>
+                                            @endif
+                                        </div>
                                     </div>
                                     
                                     {{-- Photo Management Section --}}
@@ -145,23 +173,13 @@
                                                 <p class="text-xs text-gray-600 mb-2">Current Photos (click to remove)</p>
                                                 <div class="grid grid-cols-4 sm:grid-cols-6 gap-3">
                                                     @foreach($i->photos as $p)
-                                                        <div class="relative group" 
-                                                             x-data="{ isRemoved: false }"
-                                                             :class="{ 'opacity-50 scale-95': isRemoved }">
-                                                            <input type="checkbox" name="remove_photo_ids[]" value="{{ $p->id }}" class="sr-only" x-model="isRemoved">
-                                                            <div class="relative">
-                                                                <img src="{{ Storage::url($p->path) }}" 
-                                                                     class="h-20 w-20 object-cover rounded-lg border-2 border-gray-200 hover:border-red-400 transition-all duration-200 cursor-pointer" 
-                                                                     @click="isRemoved = !isRemoved; removedPhotos.add({{ $p->id }})" />
-                                                                <div class="absolute inset-0 bg-red-500 bg-opacity-0 group-hover:bg-opacity-20 rounded-lg transition-all duration-200 flex items-center justify-center">
-                                                                    <svg class="w-6 h-6 text-red-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                                    </svg>
-                                                                </div>
-                                                            </div>
-                                                            <div x-show="isRemoved" class="absolute -top-1 -right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-                                                                ×
-                                                            </div>
+                                                        <div class="relative inline-block" x-data="{ busy: false }" data-photo-id="{{ $p->id }}">
+                                                            <img src="{{ asset('storage/' . $p->path) }}" class="w-20 h-20 object-cover rounded border border-gray-200" alt="Item Photo">
+                                                            <button type="button"
+                                                                    @click="if (busy) return; if (confirm('Are you sure you want to remove this photo?')) { busy = true; window.removePhoto({{ $p->id }}).catch(() => { busy = false; }); }"
+                                                                    class="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full hover:bg-red-600 shadow">
+                                                                ✕
+                                                            </button>
                                                         </div>
                                                     @endforeach
                                                 </div>
@@ -248,12 +266,38 @@
                 <form action="{{ route('employee.items.store') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
                     @csrf
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <input type="text" name="name" placeholder="Item name" class="w-full border rounded px-3 py-2" required>
-                        <input type="text" name="category" placeholder="Category" class="w-full border rounded px-3 py-2" required>
+                        <div>
+                            <input type="text" name="name" value="{{ old('name') }}" placeholder="Item name" class="w-full border rounded px-3 py-2" required>
+                            @if($errors->getBag('createItem')->has('name'))
+                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag('createItem')->first('name') }}</p>
+                            @endif
+                        </div>
+                        <div>
+                            <select name="category" class="w-full border rounded px-3 py-2" required>
+                                <option value="" disabled {{ old('category') ? '' : 'selected' }}>Select category</option>
+                                <option value="Caddy" {{ old('category') === 'Caddy' ? 'selected' : '' }}>Caddy</option>
+                                <option value="Carpet" {{ old('category') === 'Carpet' ? 'selected' : '' }}>Carpet</option>
+                                <option value="Placemat" {{ old('category') === 'Placemat' ? 'selected' : '' }}>Placemat</option>
+                                <option value="Others" {{ old('category') === 'Others' ? 'selected' : '' }}>Others</option>
+                            </select>
+                            @if($errors->getBag('createItem')->has('category'))
+                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag('createItem')->first('category') }}</p>
+                            @endif
+                        </div>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <input type="number" step="0.01" name="price" placeholder="Price" class="w-full border rounded px-3 py-2" min="0" required>
-                        <input type="text" name="description" placeholder="Description (optional)" class="w-full border rounded px-3 py-2">
+                        <div>
+                            <input type="number" step="0.01" name="price" value="{{ old('price') }}" placeholder="Price" class="w-full border rounded px-3 py-2" min="0" required>
+                            @if($errors->getBag('createItem')->has('price'))
+                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag('createItem')->first('price') }}</p>
+                            @endif
+                        </div>
+                        <div>
+                            <input type="text" name="description" value="{{ old('description') }}" placeholder="Description (optional)" class="w-full border rounded px-3 py-2">
+                            @if($errors->getBag('createItem')->has('description'))
+                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag('createItem')->first('description') }}</p>
+                            @endif
+                        </div>
                     </div>
                     
                     {{-- Photo Upload Section --}}
@@ -297,6 +341,9 @@
                                        @change="previews = Array.from($event.target.files).map(f => URL.createObjectURL(f))">
                             </div>
                             <p class="text-xs text-gray-500 mt-3">PNG, JPG up to 2MB each • Multiple files supported</p>
+                            @if($errors->getBag('createItem')->has('photos.*'))
+                                <p class="text-red-500 text-sm mt-2">{{ $errors->getBag('createItem')->first('photos.*') }}</p>
+                            @endif
                         </div>
 
                         {{-- Photo Previews --}}
@@ -331,7 +378,70 @@
         </div>
 
         <div>
-            {{ $items->links() }}
+            {{ $visibleItems->links() }}
+        </div>
+
+        {{-- Card: Hidden Items --}}
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm mt-6">
+            <div class="flex items-center justify-between px-4 py-3 border-b">
+                <h3 class="text-base sm:text-lg font-semibold text-gray-800">Hidden Items</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Item Name</th>
+                            <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Category</th>
+                            <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Price</th>
+                            <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Photos</th>
+                            <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Status</th>
+                            <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white">
+                        @foreach($hiddenItems as $h)
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 border-b text-sm text-gray-900">{{ $h->name }}</td>
+                            <td class="px-4 py-3 border-b text-sm text-gray-700">{{ $h->category }}</td>
+                            <td class="px-4 py-3 border-b text-sm text-gray-700">₱{{ number_format($h->price, 2) }}</td>
+                            <td class="px-4 py-3 border-b text-sm">
+                                <div class="flex items-center gap-2">
+                                    @if($h->photos->count() > 0)
+                                        @foreach($h->photos->take(3) as $p)
+                                            <img src="{{ asset('storage/' . $p->path) }}" alt="Item Photo" class="w-[60px] h-[60px] object-cover rounded-lg border border-gray-300" />
+                                        @endforeach
+                                        @if($h->photos->count() > 3)
+                                            <div class="w-[60px] h-[60px] bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-xs font-medium text-gray-600">
+                                                +{{ $h->photos->count() - 3 }}
+                                            </div>
+                                        @endif
+                                    @else
+                                        <div class="w-[60px] h-[60px] bg-gray-100 rounded-lg border border-dashed border-gray-300 flex items-center justify-center">
+                                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
+                                        </div>
+                                    @endif
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 border-b text-sm">
+                                <span class="px-2 py-1 bg-gray-400 text-white rounded">Hidden</span>
+                            </td>
+                            <td class="px-4 py-3 border-b text-sm">
+                                <form action="{{ route('employee.items.toggle', $h) }}" method="POST" class="inline">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button class="text-blue-600 hover:text-blue-700 underline">Unhide</button>
+                                </form>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-4 py-3 border-t">
+                {{ $hiddenItems->links() }}
+            </div>
         </div>
 
         {{-- Lightbox Gallery --}}
@@ -393,5 +503,35 @@
     </div>
 
 @endsection
+
+    @push('scripts')
+    <script>
+        window.removePhoto = async function(photoId) {
+            try {
+                const token = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                const response = await fetch(`{{ url('/employee/items/photos') }}/${photoId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': token,
+                        'Accept': 'application/json'
+                    }
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result.success) {
+                    alert(result.message || 'Failed to delete photo.');
+                    return;
+                }
+
+                const el = document.querySelector(`[data-photo-id="${photoId}"]`);
+                if (el) {
+                    el.remove();
+                }
+            } catch (e) {
+                alert('Failed to delete photo.');
+            }
+        }
+    </script>
+    @endpush
 
 

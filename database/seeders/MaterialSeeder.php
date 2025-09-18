@@ -10,26 +10,21 @@ class MaterialSeeder extends Seeder
     public function run(): void
     {
         $materials = [
-            ['name' => 'Abaca Fiber', 'quantity' => 25, 'unit' => 'kg'],
-            ['name' => 'Rattan Strips', 'quantity' => 50, 'unit' => 'bundle'],
-            ['name' => 'Bamboo Sticks', 'quantity' => 120, 'unit' => 'pcs'],
-            ['name' => 'Dye (Brown)', 'quantity' => 10, 'unit' => 'liters'],
-            ['name' => 'Glue', 'quantity' => 30, 'unit' => 'bottles'],
+            ['name' => 'Abaca Fiber', 'unit' => 'kg'],
+            ['name' => 'Rattan Strips', 'unit' => 'bundle'],
+            ['name' => 'Bamboo Sticks', 'unit' => 'pcs'],
+            ['name' => 'Dye (Brown)', 'unit' => 'liters'],
+            ['name' => 'Glue', 'unit' => 'bottles'],
         ];
 
         foreach ($materials as $data) {
             $material = Material::firstOrCreate(
                 ['name' => $data['name']],
                 [
-                    'quantity' => $data['quantity'],
                     'unit' => $data['unit'],
-                    'status' => 'Available',
-                    'is_hidden' => false,
+                    'is_hidden' => (bool) random_int(0, 1),
                 ]
             );
-
-            // Ensure status reflects quantity thresholds
-            $material->updateStatus();
         }
     }
 }

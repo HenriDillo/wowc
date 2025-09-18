@@ -49,6 +49,10 @@ Route::patch('/employee/raw-materials/{material}/unhide', [MaterialController::c
     Route::post('/employee/items', [ItemController::class, 'store'])->name('employee.items.store');
     Route::put('/employee/items/{item}', [ItemController::class, 'update'])->name('employee.items.update');
     Route::patch('/employee/items/{item}/toggle', [ItemController::class, 'toggleVisibility'])->name('employee.items.toggle');
+
+    // Delete a single item photo
+    Route::delete('/employee/items/photos/{photo}', [ItemController::class, 'destroyPhoto'])
+        ->name('employee.items.photos.destroy');
 });
 
 // Admin routes (only admins allowed)

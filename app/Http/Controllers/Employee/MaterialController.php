@@ -35,11 +35,7 @@ class MaterialController extends Controller
         $material = Material::create([
             'name' => $data['name'],
             'unit' => $data['unit'],
-            'quantity' => 0,
         ]);
-
-        // Optional: automatically update status
-        $material->updateStatus();
 
         return back()->with('status', 'Material created');
     }
@@ -47,20 +43,6 @@ class MaterialController extends Controller
     // Update existing material
     public function update(Request $request, Material $material)
     {
-        // Branch for Add Quantity action
-        if ($request->input('mode') === 'add_quantity') {
-            $bag = 'addQty_' . $material->id;
-            $data = $request->validateWithBag($bag, [
-                'add_quantity' => 'required|numeric|min:1',
-            ]);
-
-            $material->quantity = (float) $material->quantity + (float) $data['add_quantity'];
-            $material->save();
-            $material->updateStatus();
-
-            return back()->with('status', 'Quantity updated');
-        }
-
         // Default edit flow: only name and unit are editable
         $bag = 'edit_' . $material->id;
         $data = $request->validateWithBag($bag, [
@@ -74,9 +56,6 @@ class MaterialController extends Controller
             'name' => $data['name'],
             'unit' => $data['unit'],
         ]);
-
-        // Optional: automatically update status
-        $material->updateStatus();
 
         return back()->with('status', 'Material updated');
     }
