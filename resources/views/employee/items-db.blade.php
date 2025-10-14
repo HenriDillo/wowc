@@ -103,12 +103,12 @@
                                 @endif
                             </td>
                             <td class="px-4 py-3 border-b text-sm">
-                                <div class="flex items-center gap-3">
-                                    <button @click="editId = {{ $i->id }}" class="text-blue-600 hover:text-blue-700 underline">Edit</button>
+                                <div class="flex items-center gap-2">
+                                    <button @click="editId = {{ $i->id }}" class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
                                     <form action="{{ route('employee.items.toggle', $i) }}" method="POST" class="inline">
                                         @csrf
                                         @method('PATCH')
-                                        <button class="text-gray-700 hover:text-gray-900 underline">{{ $i->visible ? 'Hide' : 'Unhide' }}</button>
+                                        <button class="px-3 py-1.5 text-sm rounded text-white {{ $i->visible ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700' }}">{{ $i->visible ? 'Hide' : 'Unhide' }}</button>
                                     </form>
                                 </div>
                             </td>
@@ -242,8 +242,8 @@
                                     </div>
 
                                     <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
-                                        <button type="button" @click="editId = null" class="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
-                                        <button type="submit" class="bg-[#c49b6e] hover:bg-[#b08a5c] text-white text-sm px-4 py-2 rounded-lg transition-colors">Save Changes</button>
+                                    <button type="button" @click="editId = null" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
+                                    <button type="submit" class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Save Changes</button>
                                     </div>
                                 </form>
                             </div>
@@ -370,8 +370,8 @@
                     </div>
 
                     <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
-                        <button type="button" @click="openAdd = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
-                        <button type="submit" class="bg-[#c49b6e] hover:bg-[#b08a5c] text-white text-sm px-4 py-2 rounded-lg transition-colors">Create Item</button>
+                        <button type="button" @click="openAdd = false" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
+                        <button type="submit" class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Create Item</button>
                     </div>
                 </form>
             </div>

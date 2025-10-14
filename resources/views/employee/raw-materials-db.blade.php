@@ -84,10 +84,9 @@
                         @endif
                     </td>
                     <td class="px-4 py-3 border-b text-sm">
-                        <div class="flex items-center gap-3">
-                            <button @click="editId = {{ $m->id }}" class="text-blue-600 hover:text-blue-700 underline">Edit</button>
-                            <span class="text-gray-300">|</span>
-                            <button @click="hideId = {{ $m->id }}" class="text-red-600 hover:text-red-700 underline">Hide</button>
+                        <div class="flex items-center gap-2">
+                            <button @click="editId = {{ $m->id }}" class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
+                            <button @click="hideId = {{ $m->id }}" class="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700">Hide</button>
                         </div>
                     </td>
                 </tr>
@@ -114,8 +113,8 @@
                                 @endif
                             </div>
                             <div class="flex justify-end space-x-2 mt-4">
-                                <button type="button" @click="editId = null" class="px-4 py-2 border rounded-lg shadow-sm hover:bg-gray-50">Cancel</button>
-                                <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-4 py-2 rounded-lg shadow">Save</button>
+                            <button type="button" @click="editId = null" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
+                            <button type="submit" class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
                             </div>
                         </form>
                     </div>
@@ -135,8 +134,8 @@
                         <form action="{{ route('employee.materials.hide', $m) }}" method="POST" class="mt-4 flex justify-end space-x-2">
                             @csrf
                             @method('PATCH')
-                            <button type="button" @click="hideId = null" class="px-4 py-2 border rounded">Cancel</button>
-                            <button type="submit" class="bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-3 border rounded">Confirm</button>
+                            <button type="button" @click="hideId = null" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
+                            <button type="submit" class="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700">Confirm</button>
                         </form>
                     </div>
                 </div>
@@ -179,7 +178,7 @@
                         <form action="{{ route('employee.materials.unhide', $m) }}" method="POST" class="inline">
                             @csrf
                             @method('PATCH')
-                            <button class="text-blue-600 hover:text-blue-700 underline">Unhide</button>
+                            <button class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Unhide</button>
                         </form>
                     </td>
                 </tr>

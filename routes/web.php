@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\Employee\MaterialController;
 use App\Http\Controllers\Employee\ItemController;
+use App\Http\Controllers\StockController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -60,6 +61,12 @@ Route::middleware(['auth'])->group(function() {
     Route::get('/admin/users', [AdminUserController::class, 'index'])->name('admin.users');
     Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole'])->name('admin.users.updateRole');
     Route::patch('/admin/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('admin.users.toggleStatus');
+
+    // Stock Management
+    Route::get('/stock', [StockController::class, 'index'])->name('stock.index');
+    Route::post('/stock/items/{item}/add', [StockController::class, 'addItemStock'])->name('stock.items.add');
+    Route::post('/stock/materials/{material}/add', [StockController::class, 'addMaterialStock'])->name('stock.materials.add');
+    Route::post('/stock/materials/{material}/reduce', [StockController::class, 'reduceMaterialStock'])->name('stock.materials.reduce');
 });
 
 require __DIR__.'/auth.php';

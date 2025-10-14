@@ -88,6 +88,7 @@ function userManagement() {
             <div class="flex items-center space-x-3 p-3 text-white bg-[#b08a5c] rounded-lg">
                 <span class="font-medium">Users</span>
             </div>
+            
         </nav>
     </div>
 
@@ -137,9 +138,9 @@ function userManagement() {
                             <div x-text="u.email"></div>
                             <div><span :class="u.role==='admin'?'bg-blue-100 text-blue-800':u.role==='employee'?'bg-yellow-100 text-yellow-800':'bg-gray-100 text-gray-800'" class="px-2 py-1 rounded-full text-xs font-medium" x-text="u.role.charAt(0).toUpperCase()+u.role.slice(1)"></span></div>
                             <div><span :class="u.status==='blocked'?'bg-red-100 text-red-800':'bg-green-100 text-green-800'" class="px-2 py-1 rounded-full text-xs font-medium" x-text="u.status==='blocked'?'Blocked':'Active'"></span></div>
-                            <div class="flex space-x-2">
-                                <button @click="editUser(u)" class="text-blue-500 hover:underline text-sm">Edit</button>
-                                <button @click="blockUser(u)" :class="u.status==='blocked'?'text-green-500':'text-red-500'" class="hover:underline text-sm" x-text="u.status==='blocked'?'Unblock':'Block'"></button>
+                            <div class="flex gap-2">
+                                <button @click="editUser(u)" class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
+                                <button @click="blockUser(u)" class="px-3 py-1.5 text-sm text-white rounded" :class="u.status==='blocked' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'" x-text="u.status==='blocked'?'Unblock':'Block'"></button>
                             </div>
                         </div>
                     </template>
@@ -161,9 +162,9 @@ function userManagement() {
             <option value="employee">Employee</option>
             <option value="customer">Customer</option>
         </select>
-        <div class="flex justify-end space-x-2">
-            <button @click="openEdit=false;user={};role=''" class="px-4 py-2 bg-gray-300 rounded-lg">Cancel</button>
-            <button @click="updateRole()" class="px-4 py-2 bg-[#c49b6e] text-white rounded-lg">Save</button>
+        <div class="flex justify-end gap-2">
+            <button @click="openEdit=false;user={};role=''" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
+            <button @click="updateRole()" class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
         </div>
     </div>
 </div>
@@ -173,9 +174,9 @@ function userManagement() {
     <div @click.outside="openBlock=false" class="bg-white p-6 rounded-lg w-96 text-center">
         <h2 class="text-xl font-semibold mb-4" x-text="user.status==='blocked'?'Unblock User':'Block User'"></h2>
         <p class="mb-6">Are you sure you want to <strong x-text="user.status==='blocked'?'unblock':'block'"></strong> <strong x-text="user.name"></strong>?</p>
-        <div class="flex justify-center space-x-3">
-            <button @click="openBlock=false;user={}" class="px-4 py-2 bg-gray-300 rounded-lg">Cancel</button>
-            <button @click="toggleStatus()" :class="user.status==='blocked'?'bg-green-600':'bg-red-600'" class="px-4 py-2 text-white rounded-lg" x-text="user.status==='blocked'?'Unblock':'Block'"></button>
+        <div class="flex justify-center gap-2">
+            <button @click="openBlock=false;user={}" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
+            <button @click="toggleStatus()" class="px-3 py-1.5 text-sm text-white rounded" :class="user.status==='blocked'?'bg-green-600 hover:bg-green-700':'bg-red-600 hover:bg-red-700'" x-text="user.status==='blocked'?'Unblock':'Block'"></button>
         </div>
     </div>
 </div>

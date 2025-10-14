@@ -12,6 +12,7 @@ class Material extends Model
     protected $fillable = [
         'name',
         'unit',        
+        'stock',
         'is_hidden',   
     ];
 
