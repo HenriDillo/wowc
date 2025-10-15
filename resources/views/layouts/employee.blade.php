@@ -37,12 +37,20 @@
                 <span class="font-medium">Item Management</span>
             </a>
 
-            <a href="{{ route('stock.index') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
+            <a href="{{ route('admin.stock.index') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M4 3h12a1 1 0 011 1v3H3V4a1 1 0 011-1z"></path>
                     <path d="M3 8h14v8a1 1 0 01-1 1H4a1 1 0 01-1-1V8z"></path>
                 </svg>
                 <span class="font-medium">Stock Management</span>
+            </a>
+
+            <a href="{{ route('employee.orders') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M3 3h14a1 1 0 011 1v3H2V4a1 1 0 011-1z"></path>
+                    <path d="M2 8h16v8a1 1 0 01-1 1H3a1 1 0 01-1-1V8z"></path>
+                </svg>
+                <span class="font-medium">Order Management</span>
             </a>
         </nav>
     </div>

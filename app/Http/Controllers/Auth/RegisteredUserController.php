@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Address;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,7 +24,10 @@ class RegisteredUserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Password::defaults()],
-            'address' => ['required', 'string', 'max:500'],
+            'address_line' => ['required', 'string', 'max:255'],
+            'city' => ['required', 'string', 'max:120'],
+            'province' => ['required', 'string', 'max:120'],
+            'postal_code' => ['required', 'string', 'max:20'],
             'contact_number' => ['required', 'regex:/^(\+639|09)\d{9}$/'],
         ]);
 
@@ -33,8 +37,16 @@ class RegisteredUserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'customer', // default role
-            'address' => $request->address,
-            'contact_number' => $request->contact_number,
+        ]);
+
+        Address::create([
+            'user_id' => $user->id,
+            'type' => 'shipping',
+            'address_line' => $request->address_line,
+            'city' => $request->city,
+            'province' => $request->province,
+            'postal_code' => $request->postal_code,
+            'phone_number' => $request->contact_number,
         ]);
 
         event(new Registered($user));

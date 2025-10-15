@@ -17,22 +17,46 @@
         @csrf
         @method('patch')
 
-        <div>
-            <x-input-label for="name" :value="__('Name')" />
-            <x-text-input id="name" name="name" type="text" class="mt-1 block w-full" :value="old('name', $user->name)" required autofocus autocomplete="name" />
-            <x-input-error class="mt-2" :messages="$errors->get('name')" />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+                <x-input-label for="first_name" :value="__('First name')" />
+                <x-text-input id="first_name" name="first_name" type="text" class="mt-1 block w-full" :value="old('first_name', $user->first_name)" autofocus autocomplete="given-name" />
+                <x-input-error class="mt-2" :messages="$errors->get('first_name')" />
+            </div>
+            <div>
+                <x-input-label for="last_name" :value="__('Last name')" />
+                <x-text-input id="last_name" name="last_name" type="text" class="mt-1 block w-full" :value="old('last_name', $user->last_name)" autocomplete="family-name" />
+                <x-input-error class="mt-2" :messages="$errors->get('last_name')" />
+            </div>
         </div>
 
-        <div>
-            <x-input-label for="address" :value="__('Address')" />
-            <x-text-input id="address" name="address" type="text" class="mt-1 block w-full" :value="old('address', $user->address)" required autocomplete="street-address" />
-            <x-input-error class="mt-2" :messages="$errors->get('address')" />
-        </div>
-
-        <div>
-            <x-input-label for="contact_number" :value="__('Contact Number')" />
-            <x-text-input id="contact_number" name="contact_number" type="text" class="mt-1 block w-full" :value="old('contact_number', $user->contact_number)" required autocomplete="tel" />
-            <x-input-error class="mt-2" :messages="$errors->get('contact_number')" />
+        @php $addr = optional($user->address); @endphp
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="sm:col-span-2">
+                <x-input-label for="address_line" :value="__('Address')" />
+                <x-text-input id="address_line" name="address[address_line]" type="text" class="mt-1 block w-full" :value="old('address.address_line', $addr->address_line)" autocomplete="street-address" />
+                <x-input-error class="mt-2" :messages="$errors->get('address.address_line')" />
+            </div>
+            <div>
+                <x-input-label for="city" :value="__('City')" />
+                <x-text-input id="city" name="address[city]" type="text" class="mt-1 block w-full" :value="old('address.city', $addr->city)" />
+                <x-input-error class="mt-2" :messages="$errors->get('address.city')" />
+            </div>
+            <div>
+                <x-input-label for="province" :value="__('Province')" />
+                <x-text-input id="province" name="address[province]" type="text" class="mt-1 block w-full" :value="old('address.province', $addr->province)" />
+                <x-input-error class="mt-2" :messages="$errors->get('address.province')" />
+            </div>
+            <div>
+                <x-input-label for="postal_code" :value="__('Postal Code')" />
+                <x-text-input id="postal_code" name="address[postal_code]" type="text" class="mt-1 block w-full" :value="old('address.postal_code', $addr->postal_code)" />
+                <x-input-error class="mt-2" :messages="$errors->get('address.postal_code')" />
+            </div>
+            <div>
+                <x-input-label for="phone_number" :value="__('Phone Number')" />
+                <x-text-input id="phone_number" name="address[phone_number]" type="text" class="mt-1 block w-full" :value="old('address.phone_number', $addr->phone_number)" autocomplete="tel" />
+                <x-input-error class="mt-2" :messages="$errors->get('address.phone_number')" />
+            </div>
         </div>
 
         <div>

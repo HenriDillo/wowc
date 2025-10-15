@@ -31,7 +31,7 @@
                         <td class="px-4 py-3">
                             @php $photo = $item->photos->first(); @endphp
                             @if($photo)
-                                <img src="{{ asset('storage/'.$photo->path) }}" alt="{{ $item->name }}" class="h-10 w-10 rounded object-cover">
+                                <img src="{{ $photo->url }}" alt="{{ $item->name }}" class="h-10 w-10 rounded object-cover">
                             @else
                                 <div class="h-10 w-10 rounded bg-gray-200"></div>
                             @endif
@@ -52,7 +52,7 @@
                     <div x-show="modals['add_item_{{ $item->id }}']" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
                         <div class="bg-white rounded-lg shadow-lg w-full max-w-md p-5" @click.outside="modals['add_item_{{ $item->id }}']=false">
                             <h3 class="text-lg font-semibold mb-3">Add Stock - {{ $item->name }}</h3>
-                            <form method="POST" action="{{ route('stock.items.add', $item) }}" class="space-y-4">
+                            <form method="POST" action="{{ route('admin.stock.items.add', $item) }}" class="space-y-4">
                                 @csrf
                                 <div>
                                     <label class="block text-sm text-gray-700 mb-1">Quantity</label>
@@ -108,7 +108,7 @@
                     <div x-show="modals['add_mat_{{ $material->id }}']" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
                         <div class="bg-white rounded-lg shadow-lg w-full max-w-md p-5" @click.outside="modals['add_mat_{{ $material->id }}']=false">
                             <h3 class="text-lg font-semibold mb-3">Add Stock - {{ $material->name }}</h3>
-                            <form method="POST" action="{{ route('stock.materials.add', $material) }}" class="space-y-4">
+                            <form method="POST" action="{{ route('admin.stock.materials.add', $material) }}" class="space-y-4">
                                 @csrf
                                 <div>
                                     <label class="block text-sm text-gray-700 mb-1">Quantity received</label>
@@ -130,7 +130,7 @@
                     <div x-show="modals['reduce_mat_{{ $material->id }}']" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
                         <div class="bg-white rounded-lg shadow-lg w-full max-w-md p-5" @click.outside="modals['reduce_mat_{{ $material->id }}']=false">
                             <h3 class="text-lg font-semibold mb-3">Reduce Stock - {{ $material->name }}</h3>
-                            <form method="POST" action="{{ route('stock.materials.reduce', $material) }}" class="space-y-4">
+                            <form method="POST" action="{{ route('admin.stock.materials.reduce', $material) }}" class="space-y-4">
                                 @csrf
                                 <div>
                                     <label class="block text-sm text-gray-700 mb-1">Quantity used</label>

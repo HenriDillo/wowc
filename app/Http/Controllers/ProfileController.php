@@ -16,8 +16,9 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): View
     {
+        $user = $request->user()->loadMissing('address');
         return view('profile.edit', [
-            'user' => $request->user(),
+            'user' => $user,
         ]);
     }
 
@@ -26,13 +27,40 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $validated = $request->validated();
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        $user = $request->user();
+
+        // Combine first/last name if provided
+        if (!empty($validated['first_name']) || !empty($validated['last_name'])) {
+            $full = trim(($validated['first_name'] ?? '').' '.($validated['last_name'] ?? ''));
+            if ($full !== '') {
+                $user->name = $full;
+            }
+        } elseif (!empty($validated['name'])) {
+            $user->name = $validated['name'];
         }
 
-        $request->user()->save();
+        if (!empty($validated['email']) && $validated['email'] !== $user->email) {
+            $user->email = $validated['email'];
+            $user->email_verified_at = null;
+        }
+
+        $user->save();
+
+        // Update or create a primary address if address payload present
+        $addr = $validated['address'] ?? null;
+        if (is_array($addr)) {
+            $user->address()->updateOrCreate([], [
+                'user_id' => $user->id,
+                'type' => 'shipping',
+                'address_line' => $addr['address_line'] ?? null,
+                'city' => $addr['city'] ?? null,
+                'province' => $addr['province'] ?? null,
+                'postal_code' => $addr['postal_code'] ?? null,
+                'phone_number' => $addr['phone_number'] ?? null,
+            ]);
+        }
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }

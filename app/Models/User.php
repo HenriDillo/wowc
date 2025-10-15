@@ -23,8 +23,6 @@ class User extends Authenticatable
         'password',
         'role',
         'status',
-        'address',
-        'contact_number',
     ];
 
     public function isAdmin(): bool
@@ -69,8 +67,43 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
-    // App\Models\User.php
     
+    /**
+     * Derive first name from the full name for convenience in forms.
+     */
+    public function getFirstNameAttribute(): ?string
+    {
+        $name = (string) ($this->attributes['name'] ?? '');
+        $parts = preg_split('/\s+/', trim($name));
+        return $parts[0] ?? null;
+    }
 
+    /**
+     * Derive last name from the full name for convenience in forms.
+     */
+    public function getLastNameAttribute(): ?string
+    {
+        $name = (string) ($this->attributes['name'] ?? '');
+        $parts = preg_split('/\s+/', trim($name));
+        if (!$parts || count($parts) < 2) {
+            return null;
+        }
+        array_shift($parts);
+        return implode(' ', $parts);
+    }
+    
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
+    }
 
+    public function addresses()
+    {
+        return $this->hasMany(Address::class);
+    }
+
+    public function address()
+    {
+        return $this->hasOne(Address::class);
+    }
 }

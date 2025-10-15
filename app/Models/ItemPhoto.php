@@ -27,7 +27,22 @@ class ItemPhoto extends Model
         // Normalize legacy paths that might include a leading 'public/'
         $normalized = preg_replace('#^public/#', '', $storedPath);
         $normalized = ltrim($normalized ?? '', '/');
-        return \Illuminate\Support\Facades\Storage::disk('public')->url($normalized);
+        // If already a full URL, return as-is
+        if (preg_match('#^https?://#i', $normalized)) {
+            return $normalized;
+        }
+        // If file exists on public disk, generate a URL. If the public/storage link is missing,
+        // fall back to a streamed media endpoint to ensure cross-machine compatibility (Windows/dev boxes).
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        if ($normalized !== '' && $disk->exists($normalized)) {
+            $hasSymlink = is_link(public_path('storage')) || file_exists(public_path('storage'));
+            if ($hasSymlink) {
+                return $disk->url($normalized);
+            }
+            return url('/media/' . $normalized);
+        }
+        // Fallback to a public images placeholder
+        return asset('images/login-bg.jpg');
     }
 
     public function item()

@@ -72,8 +72,8 @@
                                     @if($i->photos->count() > 0)
                                         @foreach($i->photos->take(3) as $index => $p)
                                             <div class="relative group cursor-pointer" 
-                                                 @click="lightboxImages = {{ $i->photos->pluck('path')->map(fn($path) => asset('storage/' . $path))->toJson() }}; lightboxIndex = {{ $index }}; lightboxOpen = true">
-                                                <img src="{{ asset('storage/' . $p->path) }}" alt="Item Photo" class="w-[60px] h-[60px] object-cover rounded-lg border border-gray-300 hover:border-[#c49b6e] transition-all duration-200 shadow-sm hover:shadow-md" />
+                                                 @click="lightboxImages = {{ $i->photos->pluck('url')->toJson() }}; lightboxIndex = {{ $index }}; lightboxOpen = true">
+                                                <img src="{{ $p->url }}" alt="Item Photo" class="w-[60px] h-[60px] object-cover rounded-lg border border-gray-300 hover:border-[#c49b6e] transition-all duration-200 shadow-sm hover:shadow-md" />
                                                 <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-lg transition-all duration-200 flex items-center justify-center">
                                                     <svg class="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path>
@@ -174,7 +174,7 @@
                                                 <div class="grid grid-cols-4 sm:grid-cols-6 gap-3">
                                                     @foreach($i->photos as $p)
                                                         <div class="relative inline-block" x-data="{ busy: false }" data-photo-id="{{ $p->id }}">
-                                                            <img src="{{ asset('storage/' . $p->path) }}" class="w-20 h-20 object-cover rounded border border-gray-200" alt="Item Photo">
+                                                            <img src="{{ $p->url }}" class="w-20 h-20 object-cover rounded border border-gray-200" alt="Item Photo">
                                                             <button type="button"
                                                                     @click="if (busy) return; if (confirm('Are you sure you want to remove this photo?')) { busy = true; window.removePhoto({{ $p->id }}).catch(() => { busy = false; }); }"
                                                                     class="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full hover:bg-red-600 shadow">

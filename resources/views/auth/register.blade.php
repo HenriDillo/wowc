@@ -35,18 +35,37 @@
                         @enderror
                     </div>
 
-                    <!-- Address -->
+                    <!-- Address Line -->
                     <div>
-                        <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
-                        <input id="address" type="text" name="address" value="{{ old('address') }}" required
+                        <label for="address_line" class="block text-sm font-medium text-gray-700">Address</label>
+                        <input id="address_line" type="text" name="address_line" value="{{ old('address_line') }}" required
                                class="w-full px-4 py-3 border rounded-full shadow-sm focus:ring-[#A9793E] focus:border-[#A9793E]"
-                               placeholder="Barangay, City/Municipality, Province">
-                        @error('address')
+                               placeholder="Street / Barangay">
+                        @error('address_line')
                             <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                         @enderror
                     </div>
 
-                    <!-- Contact Number -->
+                    <!-- City / Province / Postal -->
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label for="city" class="block text-sm font-medium text-gray-700">City</label>
+                            <input id="city" type="text" name="city" value="{{ old('city') }}" required
+                                   class="w-full px-4 py-3 border rounded-full shadow-sm focus:ring-[#A9793E] focus:border-[#A9793E]">
+                        </div>
+                        <div>
+                            <label for="province" class="block text-sm font-medium text-gray-700">Province</label>
+                            <input id="province" type="text" name="province" value="{{ old('province') }}" required
+                                   class="w-full px-4 py-3 border rounded-full shadow-sm focus:ring-[#A9793E] focus:border-[#A9793E]">
+                        </div>
+                        <div>
+                            <label for="postal_code" class="block text-sm font-medium text-gray-700">Postal Code</label>
+                            <input id="postal_code" type="text" name="postal_code" value="{{ old('postal_code') }}" required
+                                   class="w-full px-4 py-3 border rounded-full shadow-sm focus:ring-[#A9793E] focus:border-[#A9793E]">
+                        </div>
+                    </div>
+
+                    <!-- Contact Number (kept) -->
                     <div>
                         <label for="contact_number" class="block text-sm font-medium text-gray-700">Contact Number</label>
                         <input id="contact_number" type="text" name="contact_number" value="{{ old('contact_number') }}" required
