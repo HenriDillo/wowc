@@ -18,7 +18,8 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'name',
+        'first_name',
+        'last_name',
         'email',
         'password',
         'role',
@@ -69,27 +70,11 @@ class User extends Authenticatable
     }
     
     /**
-     * Derive first name from the full name for convenience in forms.
+     * Get the user's full name.
      */
-    public function getFirstNameAttribute(): ?string
+    public function getNameAttribute(): string
     {
-        $name = (string) ($this->attributes['name'] ?? '');
-        $parts = preg_split('/\s+/', trim($name));
-        return $parts[0] ?? null;
-    }
-
-    /**
-     * Derive last name from the full name for convenience in forms.
-     */
-    public function getLastNameAttribute(): ?string
-    {
-        $name = (string) ($this->attributes['name'] ?? '');
-        $parts = preg_split('/\s+/', trim($name));
-        if (!$parts || count($parts) < 2) {
-            return null;
-        }
-        array_shift($parts);
-        return implode(' ', $parts);
+        return trim($this->first_name . ' ' . $this->last_name);
     }
     
     public function orders()

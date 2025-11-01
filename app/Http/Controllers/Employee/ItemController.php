@@ -68,10 +68,12 @@ class ItemController extends Controller
 
         if ($request->hasFile('photos')) {
             foreach ($request->file('photos') as $file) {
-                // Store directly on the 'public' disk so files land in storage/app/public/items
-                $path = $file->store('items', 'public'); // returns e.g. 'items/filename.jpg'
-                $relativePath = str_replace('public/', '', $path); // safety for legacy behavior
-                $item->photos()->create(['path' => $relativePath]);
+                // Generate unique filename with timestamp and random string
+                $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                // Move file to public/uploads/items directory
+                $file->move(public_path('uploads/items'), $filename);
+                // Store relative path in database
+                $item->photos()->create(['path' => 'uploads/items/' . $filename]);
             }
         }
         return back()->with('status', 'Item created');
@@ -101,11 +103,10 @@ class ItemController extends Controller
         if (!empty($data['remove_photo_ids'])) {
             $photos = ItemPhoto::whereIn('id', $data['remove_photo_ids'])->where('item_id', $item->id)->get();
             foreach ($photos as $photo) {
-                // Handle both legacy 'public/...'(old) and 'items/...' (new) paths
-                $deletePath = preg_replace('#^public/#', '', $photo->path);
-                $deletePath = ltrim($deletePath ?? '', '/');
-                if (!empty($deletePath)) {
-                    Storage::disk('public')->delete($deletePath);
+                // Delete physical file if it exists
+                $filePath = public_path($photo->path);
+                if (file_exists($filePath)) {
+                    unlink($filePath);
                 }
                 $photo->delete();
             }
@@ -114,10 +115,12 @@ class ItemController extends Controller
         // Add new photos
         if ($request->hasFile('photos')) {
             foreach ($request->file('photos') as $file) {
-                // Store directly on the 'public' disk so files land in storage/app/public/items
-                $path = $file->store('items', 'public'); // returns e.g. 'items/filename.jpg'
-                $relativePath = str_replace('public/', '', $path); // safety for legacy behavior
-                $item->photos()->create(['path' => $relativePath]);
+                // Generate unique filename with timestamp and random string
+                $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                // Move file to public/uploads/items directory
+                $file->move(public_path('uploads/items'), $filename);
+                // Store relative path in database
+                $item->photos()->create(['path' => 'uploads/items/' . $filename]);
             }
         }
         return back()->with('status', 'Item updated');
@@ -135,12 +138,10 @@ class ItemController extends Controller
         // Optional: authorize based on ownership/role
         // Gate::authorize('delete', $photo);
 
-        $deletePath = preg_replace('#^public/#', '', (string) $photo->path);
-        $deletePath = ltrim($deletePath, '/');
-
         $deletedFromDisk = true;
-        if ($deletePath !== '') {
-            $deletedFromDisk = Storage::disk('public')->delete($deletePath);
+        $filePath = public_path($photo->path);
+        if (file_exists($filePath)) {
+            $deletedFromDisk = unlink($filePath);
         }
 
         $photo->delete();

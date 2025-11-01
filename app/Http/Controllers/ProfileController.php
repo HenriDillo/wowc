@@ -31,14 +31,12 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
-        // Combine first/last name if provided
-        if (!empty($validated['first_name']) || !empty($validated['last_name'])) {
-            $full = trim(($validated['first_name'] ?? '').' '.($validated['last_name'] ?? ''));
-            if ($full !== '') {
-                $user->name = $full;
-            }
-        } elseif (!empty($validated['name'])) {
-            $user->name = $validated['name'];
+        // Update name fields
+        if (isset($validated['first_name'])) {
+            $user->first_name = $validated['first_name'];
+        }
+        if (isset($validated['last_name'])) {
+            $user->last_name = $validated['last_name'];
         }
 
         if (!empty($validated['email']) && $validated['email'] !== $user->email) {
