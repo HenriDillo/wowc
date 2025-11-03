@@ -27,7 +27,7 @@ function userManagement() {
             let filtered = this.users;
             if (this.searchTerm) {
                 filtered = filtered.filter(u =>
-                    u.name.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+                    (u.first_name + ' ' + u.last_name).toLowerCase().includes(this.searchTerm.toLowerCase()) ||
                     u.email.toLowerCase().includes(this.searchTerm.toLowerCase())
                 );
             }
@@ -98,7 +98,7 @@ function userManagement() {
             <h1 class="text-2xl font-semibold text-gray-800">Users</h1>
             <div class="relative">
                 <button @click="dropdownOpen = !dropdownOpen" class="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
-                    <span>Hello, {{ Auth::user()->name ?? 'Admin' }}</span>
+                    <span>Hello, {{ Auth::user()->first_name ?? 'Admin' }}</span>
                     <div class="w-8 h-8 bg-gray-300 rounded-full"></div>
                 </button>
                 <div x-show="dropdownOpen" x-cloak x-transition @click.outside="dropdownOpen=false" class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
@@ -134,7 +134,7 @@ function userManagement() {
                     </div>
                     <template x-for="u in filteredUsers" :key="u.id">
                         <div class="grid grid-cols-5 gap-4 py-4 border-b items-center">
-                            <div x-text="u.name"></div>
+                            <div x-text="u.first_name + ' ' + u.last_name"></div>
                             <div x-text="u.email"></div>
                             <div><span :class="u.role==='admin'?'bg-blue-100 text-blue-800':u.role==='employee'?'bg-yellow-100 text-yellow-800':'bg-gray-100 text-gray-800'" class="px-2 py-1 rounded-full text-xs font-medium" x-text="u.role.charAt(0).toUpperCase()+u.role.slice(1)"></span></div>
                             <div><span :class="u.status==='blocked'?'bg-red-100 text-red-800':'bg-green-100 text-green-800'" class="px-2 py-1 rounded-full text-xs font-medium" x-text="u.status==='blocked'?'Blocked':'Active'"></span></div>
@@ -173,7 +173,7 @@ function userManagement() {
 <div x-show="openBlock" x-cloak class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
     <div @click.outside="openBlock=false" class="bg-white p-6 rounded-lg w-96 text-center">
         <h2 class="text-xl font-semibold mb-4" x-text="user.status==='blocked'?'Unblock User':'Block User'"></h2>
-        <p class="mb-6">Are you sure you want to <strong x-text="user.status==='blocked'?'unblock':'block'"></strong> <strong x-text="user.name"></strong>?</p>
+        <p class="mb-6">Are you sure you want to <strong x-text="user.status==='blocked'?'unblock':'block'"></strong> <strong x-text="user.first_name + ' ' + user.last_name"></strong>?</p>
         <div class="flex justify-center gap-2">
             <button @click="openBlock=false;user={}" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
             <button @click="toggleStatus()" class="px-3 py-1.5 text-sm text-white rounded" :class="user.status==='blocked'?'bg-green-600 hover:bg-green-700':'bg-red-600 hover:bg-red-700'" x-text="user.status==='blocked'?'Unblock':'Block'"></button>

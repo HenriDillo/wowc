@@ -24,15 +24,28 @@
                 <form method="POST" action="{{ route('register') }}" class="space-y-5">
                     @csrf
 
-                    <!-- Name -->
-                    <div>
-                        <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
-                        <input id="name" type="text" name="name" value="{{ old('name') }}" required autofocus
-                               class="w-full px-4 py-3 border rounded-full shadow-sm focus:ring-[#A9793E] focus:border-[#A9793E]"
-                               placeholder="Full Name">
-                        @error('name')
-                            <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                        @enderror
+                    <!-- Name Fields -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <!-- First Name -->
+                        <div>
+                            <label for="first_name" class="block text-sm font-medium text-gray-700">First Name</label>
+                            <input id="first_name" type="text" name="first_name" value="{{ old('first_name') }}" required autofocus
+                                   class="w-full px-4 py-3 border rounded-full shadow-sm focus:ring-[#A9793E] focus:border-[#A9793E]"
+                                   placeholder="First Name">
+                            @error('first_name')
+                                <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+                        <!-- Last Name -->
+                        <div>
+                            <label for="last_name" class="block text-sm font-medium text-gray-700">Last Name</label>
+                            <input id="last_name" type="text" name="last_name" value="{{ old('last_name') }}" required
+                                   class="w-full px-4 py-3 border rounded-full shadow-sm focus:ring-[#A9793E] focus:border-[#A9793E]"
+                                   placeholder="Last Name">
+                            @error('last_name')
+                                <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
                     </div>
 
                     <!-- Address Line -->

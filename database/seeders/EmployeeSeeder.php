@@ -16,7 +16,8 @@ class EmployeeSeeder extends Seeder
     {
         // Create multiple employees
         $u1 = User::create([
-            'name' => 'John Doe',
+            'first_name' => 'John',
+            'last_name' => 'Doe',
             'email' => 'john.doe@example.com',
             'password' => Hash::make('password123'), // default password
             'role' => 'employee',
@@ -33,7 +34,8 @@ class EmployeeSeeder extends Seeder
         ]);
 
         $u2 = User::create([
-            'name' => 'Jane Smith',
+            'first_name' => 'Jane',
+            'last_name' => 'Smith',
             'email' => 'jane.smith@example.com',
             'password' => Hash::make('password123'),
             'role' => 'employee',
