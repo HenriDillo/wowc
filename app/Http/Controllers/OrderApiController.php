@@ -17,7 +17,7 @@ class OrderApiController extends Controller
     public function store(Request $request, User $user)
     {
         $validated = $request->validate([
-            'order_type' => 'required|in:standard,backorder,preorder,custom',
+            'order_type' => 'required|in:standard,backorder,custom',
             'status' => 'nullable|in:pending,processing,completed,cancelled',
             'total_amount' => 'required|numeric|min:0',
             'payment_method' => 'nullable|in:COD,GCash,Card',

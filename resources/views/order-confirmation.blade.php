@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}</style>
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    @php $hasPreorder = (bool) ($hasPreorder ?? false); @endphp
+
 </head>
 <body class="bg-white">
     <nav class="bg-white/90 backdrop-blur border-b border-gray-100">
@@ -35,11 +35,7 @@
                     <span class="inline-flex items-center px-2 py-0.5 rounded border border-gray-300 capitalize">Type: {{ $order->order_type }}</span>
                     <span class="inline-flex items-center px-2 py-0.5 rounded border border-gray-300 capitalize">Status: {{ $order->status }}</span>
                 </div>
-                @if($hasPreorder)
-                    <div class="mt-4 p-4 rounded-md border border-amber-200 bg-amber-50 text-amber-800">
-                        This order contains pre-order items. We’ll ship once released.
-                    </div>
-                @endif
+
                 @if(($hasBackorder ?? false))
                     <div class="mt-3 p-4 rounded-md border border-blue-200 bg-blue-50 text-blue-800">
                         This order contains back-ordered items. We’ll ship once restocked.
@@ -60,10 +56,7 @@
                                         <div class="text-xs text-gray-500">Qty: {{ $oi->quantity }} • ₱{{ number_format($oi->price, 2) }}</div>
                                         @php
                                             $stockNote = null;
-                                            if ($oi->is_preorder ?? false) {
-                                                $rd = optional($oi->item?->release_date)->format('M d');
-                                                $stockNote = $rd ? "Pre-order item, ships after $rd" : 'Pre-order item';
-                                            } elseif ($oi->is_backorder ?? false) {
+                                            if ($oi->is_backorder ?? false) {
                                                 $rd = optional($oi->item?->restock_date)->format('M d');
                                                 $stockNote = $rd ? "Backordered, restock expected $rd" : 'Backordered';
                                             }

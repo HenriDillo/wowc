@@ -38,9 +38,56 @@ class StockController extends Controller
             'remarks' => 'nullable|string|max:500',
         ]);
 
-        $item->increment('stock', $data['quantity']);
+        $added = (int) $data['quantity'];
 
-        return back()->with('status', 'Item stock updated');
+        // Use transaction to allocate stock to pending backorders
+        \DB::transaction(function () use ($item, $added) {
+            $item->increment('stock', $added);
+
+            // Re-load to get updated stock
+            $item->refresh();
+            $available = (int) $item->stock;
+
+            if ($available <= 0) {
+                return;
+            }
+
+            // Find pending backorder order items (FIFO)
+            $pending = \App\Models\OrderItem::where('item_id', $item->id)
+                ->where('is_backorder', true)
+                ->where('backorder_status', \App\Models\OrderItem::BO_PENDING)
+                ->orderBy('created_at')
+                ->get();
+
+            foreach ($pending as $oi) {
+                if ($available <= 0) break;
+
+                if ($oi->quantity <= $available) {
+                    // We can fulfill this order item now
+                    $oi->backorder_status = \App\Models\OrderItem::BO_IN_PROGRESS;
+                    $oi->save();
+
+                    // Notify customer that their backorder is now ready for fulfillment
+                    try {
+                        $oi->loadMissing('order.user');
+                        if ($oi->order && $oi->order->user && $oi->order->user->email) {
+                            \Mail::to($oi->order->user->email)->send(new \App\Mail\BackorderReady($oi));
+                        }
+                    } catch (\Throwable $e) {
+                        // swallow mail errors but log them
+                        \Log::error('Failed to send backorder ready email', ['error' => $e->getMessage(), 'order_item_id' => $oi->id]);
+                    }
+
+                    $available -= $oi->quantity;
+                }
+            }
+
+            // Persist remaining stock
+            $item->stock = $available;
+            $item->save();
+        });
+
+        return back()->with('status', 'Item stock updated and backorders allocated');
     }
 
     /**

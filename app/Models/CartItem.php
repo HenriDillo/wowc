@@ -15,11 +15,13 @@ class CartItem extends Model
         'quantity',
         'price',
         'subtotal',
+        'is_backorder',
     ];
 
     protected $casts = [
         'price' => 'decimal:2',
         'subtotal' => 'decimal:2',
+        'is_backorder' => 'boolean',
     ];
 
     public function cart()

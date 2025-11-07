@@ -116,6 +116,16 @@
                         </div>
                     </div>
                 </a>
+                <a href="{{ route('employee.orders') }}?type=backorder&backorder_status=pending_stock" class="block bg-white border rounded-xl shadow-sm hover:shadow transition">
+                    <div class="p-4 flex items-center gap-4">
+                        <div class="h-10 w-10 rounded-lg flex items-center justify-center text-white bg-blue-600">BO</div>
+                        <div>
+                            <div class="text-sm text-gray-600">Pending Back Orders</div>
+                            <div class="text-2xl font-semibold text-gray-900">{{ $pendingBackOrders ?? 0 }}</div>
+                            <div class="mt-1 text-xs text-gray-600">Awaiting restock</div>
+                        </div>
+                    </div>
+                </a>
             </div>
 
             <!-- Recent Activity -->

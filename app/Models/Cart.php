@@ -15,6 +15,11 @@ class Cart extends Model
         'status',
     ];
 
+    public function customItems()
+    {
+        return $this->hasMany(CustomCartItem::class);
+    }
+
     public function items()
     {
         return $this->hasMany(CartItem::class);

@@ -20,7 +20,6 @@
                 @php $type = $activeType; @endphp
                 @php $tabs = [
                     '' => 'All Orders',
-                    'preorder' => 'Pre-Orders',
                     'backorder' => 'Back-Orders',
                     'custom' => 'Custom Orders',
                     'completed' => 'Completed',
@@ -33,6 +32,14 @@
             <form method="GET" action="{{ url('/employee/orders') }}" class="flex items-center gap-2">
                 <input type="hidden" name="type" value="{{ $activeType }}"/>
                 <input type="text" name="q" value="{{ request('q') }}" placeholder="Search by Order ID, name or status" class="w-64 rounded-lg border border-gray-300 focus:border-[#c59d5f] focus:ring-1 focus:ring-[#c59d5f]"/>
+                <select name="backorder_status" class="rounded-lg border border-gray-300">
+                    <option value="">All BO Statuses</option>
+                    <option value="pending_stock" @selected(request('backorder_status')==='pending_stock')>Pending Stock</option>
+                    <option value="in_progress" @selected(request('backorder_status')==='in_progress')>In Progress</option>
+                    <option value="fulfilled" @selected(request('backorder_status')==='fulfilled')>Fulfilled</option>
+                </select>
+                <input type="date" name="from" value="{{ request('from') }}" class="rounded-lg border border-gray-300" />
+                <input type="date" name="to" value="{{ request('to') }}" class="rounded-lg border border-gray-300" />
                 <button class="px-4 py-2 rounded-lg text-white shadow-sm hover:shadow" style="background:#c49b6e;">Search</button>
             </form>
         </div>
@@ -69,7 +76,6 @@
                                     'completed' => 'bg-green-100 text-green-800',
                                     'cancelled' => 'bg-red-100 text-red-700',
                                     'backorder' => 'bg-indigo-100 text-indigo-800',
-                                    'preorder' => 'bg-amber-100 text-amber-800',
                                 ][$o->status] ?? 'bg-gray-100 text-gray-700';
                             @endphp
                             <span class="inline-flex px-2 py-0.5 rounded text-xs capitalize {{ $statusColor }}">{{ $o->status }}</span>
@@ -134,7 +140,6 @@
                                         <option value="completed">Completed</option>
                                         <option value="cancelled">Cancelled</option>
                                         <option value="backorder">Backorder</option>
-                                        <option value="preorder">Preorder</option>
                                     </select>
                                 </div>
                             </div>

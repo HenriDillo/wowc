@@ -15,7 +15,7 @@ class OrderController extends Controller
 
         // Filter by order type
         $type = $request->string('type')->toString();
-        if (in_array($type, ['standard', 'preorder', 'backorder', 'custom', 'completed', 'cancelled'], true)) {
+    if (in_array($type, ['standard', 'backorder', 'custom', 'completed', 'cancelled'], true)) {
             if ($type === 'completed') {
                 $query->where('status', 'completed');
             } elseif ($type === 'cancelled') {
@@ -28,6 +28,24 @@ class OrderController extends Controller
         // Filter by status
         if ($request->filled('status')) {
             $query->where('status', $request->string('status')->toString());
+        }
+
+        // Filter by backorder item status (search orders that have items with the given backorder_status)
+        if ($request->filled('backorder_status')) {
+            $bs = $request->string('backorder_status')->toString();
+            $query->whereHas('items', function ($q) use ($bs) {
+                $q->where('is_backorder', true)->where('backorder_status', $bs);
+            });
+        }
+
+        // Filter by date range
+        if ($request->filled('from') || $request->filled('to')) {
+            if ($request->filled('from')) {
+                $query->whereDate('created_at', '>=', $request->string('from')->toString());
+            }
+            if ($request->filled('to')) {
+                $query->whereDate('created_at', '<=', $request->string('to')->toString());
+            }
         }
 
         // Search by order id, customer name or email
@@ -61,11 +79,49 @@ class OrderController extends Controller
         return view('employee.order-show', compact('order'));
     }
 
+    /**
+     * Update backorder status for a single order item.
+     */
+    public function updateItemBackorder($orderId, $itemId, Request $request)
+    {
+        $validated = $request->validate([
+            'backorder_status' => 'required|in:pending_stock,in_progress,fulfilled',
+            'expected_restock_date' => 'nullable|date',
+        ]);
+
+        $order = Order::with('items')->findOrFail($orderId);
+        $oi = $order->items()->where('id', $itemId)->firstOrFail();
+
+        $old = $oi->backorder_status;
+        $oi->backorder_status = $validated['backorder_status'];
+        $oi->save();
+
+        // If status moved to in_progress or fulfilled, notify customer
+        if ($old !== $oi->backorder_status && in_array($oi->backorder_status, [\App\Models\OrderItem::BO_IN_PROGRESS, \App\Models\OrderItem::BO_FULFILLED], true)) {
+            try {
+                $oi->loadMissing('order.user', 'item');
+                if ($oi->order && $oi->order->user && $oi->order->user->email) {
+                    \Mail::to($oi->order->user->email)->send(new \App\Mail\BackorderReady($oi));
+                }
+            } catch (\Throwable $e) {
+                \Log::error('Failed to send backorder notification', ['error' => $e->getMessage(), 'order_item' => $oi->id]);
+            }
+        }
+
+        // Optionally update order-level expected_restock_date
+        if (!empty($validated['expected_restock_date'])) {
+            $order->expected_restock_date = $validated['expected_restock_date'];
+            $order->save();
+        }
+
+        return response()->json(['success' => true, 'item' => $oi]);
+    }
+
     public function update($id, Request $request)
     {
         $validated = $request->validate([
-            // Restrict to DB enum: pending, processing, completed, cancelled, backorder, preorder
-            'status' => 'required|in:pending,processing,completed,cancelled,backorder,preorder',
+            // Restrict to DB enum: pending, processing, completed, cancelled, backorder
+            'status' => 'required|in:pending,processing,completed,cancelled,backorder',
         ]);
         $order = Order::findOrFail($id);
         $order->status = $validated['status'];

@@ -87,9 +87,7 @@
                 @php $photoUrls = $item->photos->pluck('url')->filter()->values(); @endphp
                 <div x-data="{photos: {{ $photoUrls->isNotEmpty() ? $photoUrls->toJson() : json_encode([$item->photo_url]) }}, selected: 0}" class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-6">
                     <div class="relative w-full aspect-square bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center">
-                        @if(($item->status ?? null) === 'pre_order')
-                            <span class="absolute top-3 left-3 inline-flex items-center px-2 py-1 text-xs font-semibold rounded bg-amber-100 text-amber-800">Pre-Order</span>
-                        @elseif(($item->status ?? null) === 'back_order')
+                        @if(($item->status ?? null) === 'back_order')
                             <span class="absolute top-3 left-3 inline-flex items-center px-2 py-1 text-xs font-semibold rounded bg-blue-100 text-blue-800">Back-Order</span>
                         @endif
 						<template x-if="photos && photos.length">
@@ -111,55 +109,75 @@
 					<h1 class="text-2xl md:text-3xl font-semibold text-gray-900">{{ $item->name }}</h1>
 					<p class="mt-2 text-[#c59d5f] text-xl font-semibold">₱{{ number_format($item->price, 2) }}</p>
                     <p class="mt-4 text-gray-700 max-w-xl leading-relaxed">{{ $item->description }}</p>
-                    @if(($item->status ?? null) === 'pre_order')
-                        <p class="mt-2 text-sm text-amber-700">Available for Pre-Order</p>
-                        @if($item->release_date)
-                            <p class="text-xs text-amber-600">Ships starting {{ $item->release_date->format('M d, Y') }}</p>
-                        @endif
-                    @elseif(($item->status ?? null) === 'back_order')
+                    @if(($item->status ?? null) === 'back_order')
                         <p class="mt-2 text-sm text-blue-700">Available on Back Order</p>
                         @if($item->restock_date)
-                            <p class="text-xs text-blue-600">Restocking soon  Ships after {{ $item->restock_date->format('M d, Y') }}</p>
+                            <p class="text-xs text-blue-600">Restocking soon  Ships after {{ $item->restock_date->format('M d, Y') }}</p>
                         @endif
                     @endif
 
 					<!-- Stock status -->
 					@php
 						$stock = (int) ($item->stock ?? 0);
-						$statusText = $stock > 10 ? 'In Stock' : ($stock > 0 ? 'Low Stock' : 'Out of Stock');
-						$statusColor = $stock > 10 ? 'text-green-600' : ($stock > 0 ? 'text-amber-600' : 'text-red-600');
+						$isBackOrder = ($item->status ?? null) === 'back_order';
+						if ($isBackOrder) {
+							$statusText = 'Available for Back Order';
+							$statusColor = 'text-blue-600';
+						} else {
+							$statusText = $stock > 10 ? 'In Stock' : ($stock > 0 ? 'Low Stock' : 'Out of Stock — Available for Back Order');
+							$statusColor = $stock > 10 ? 'text-green-600' : ($stock > 0 ? 'text-amber-600' : 'text-blue-600');
+						}
 					@endphp
 					<p class="mt-3 text-sm font-medium {{ $statusColor }}">{{ $statusText }}</p>
+
+					@if($stock <= 0 || $isBackOrder)
+						<div class="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+							<p class="text-sm text-blue-800">This item is available for back order. We'll ship it as soon as it's back in stock.</p>
+							@if($item->restock_date)
+								<p class="mt-1 text-xs text-blue-700">Expected restock date: {{ $item->restock_date->format('M d, Y') }}</p>
+							@endif
+						</div>
+					@elseif($stock <= 5)
+						<div class="mt-3 p-3 bg-yellow-50 border border-yellow-100 rounded-lg">
+							<p class="text-sm text-yellow-800">Only {{ $stock }} items left in stock. Order soon!</p>
+						</div>
+					@endif
 
 					<!-- Quantity selector -->
                     <div class="mt-6">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
                         <div class="inline-flex items-center border border-gray-300 rounded-md overflow-hidden">
                             <button type="button" @click="qty = Math.max(1, qty - 1)" class="px-3 py-2 text-gray-600 hover:bg-gray-50">-</button>
-                            <input type="number" x-model.number="qty" min="1" @change="qty = Math.min(qty, {{ $item->isPreorder() ? $item->preorderLimit() : max(1, (int)($item->stock ?? 0)) }})" class="w-14 text-center border-0 focus:ring-0"/>
-                            <button type="button" @click="qty = Math.min(qty + 1, {{ $item->isPreorder() ? $item->preorderLimit() : max(1, (int)($item->stock ?? 0)) }})" class="px-3 py-2 text-gray-600 hover:bg-gray-50">+</button>
+                            <input type="number" 
+                                x-model.number="qty" 
+                                min="1" 
+                                @change="qty = {{ $isBackOrder ? 'Math.max(1, qty)' : 'Math.min(qty, Math.max(1, '.$stock.'))' }}" 
+                                class="w-14 text-center border-0 focus:ring-0"
+                            />
+                            <button type="button" 
+                                @click="qty = {{ $isBackOrder ? 'qty + 1' : 'Math.min(qty + 1, Math.max(1, '.$stock.'))' }}" 
+                                class="px-3 py-2 text-gray-600 hover:bg-gray-50"
+                            >+</button>
                         </div>
-                        @if($item->isPreorder())
-                            <p class="mt-1 text-xs text-gray-500">Limit {{ $item->preorderLimit() }} per customer</p>
+                        @if($isBackOrder || $stock <= 0)
+                            <p class="mt-1 text-xs text-blue-600">No quantity limit for back orders</p>
                         @endif
+
                     </div>
 
-					<!-- Add to cart -->
+					<!-- Add to cart (standard form submission, avoids API/fetch) -->
 					<div class="mt-6">
-                        <button @click="
-                            adding=true;
-                            fetch('/api/v1/cart/add', {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json','X-CSRF-TOKEN': '{{ csrf_token() }}','X-Requested-With':'XMLHttpRequest'}, body: JSON.stringify({item_id: {{ $item->id }}, quantity: qty})})
-							.then(r=>r.json())
-							.then(()=>{ window.dispatchEvent(new CustomEvent('cart-updated')); added=true; adding=false; setTimeout(()=>{added=false},1500);});
-                        " :disabled="adding" class="inline-flex items-center justify-center px-6 py-3 rounded-md text-white font-medium shadow-sm hover:shadow transition disabled:opacity-60 disabled:cursor-not-allowed" style="background:#c59d5f;">
-							<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m2.6 8L6 5H3m4 8a2 2 0 100 4 2 2 0 000-4zm10 0a2 2 0 100 4 2 2 0 000-4z"/></svg>
-                            <span x-show="!added">
-                                {{ ($item->status ?? null) === 'pre_order' ? 'Pre-Order Now' : (($item->status ?? null) === 'back_order' ? 'Order Now (Back Order)' : 'Add to cart') }}
-                            </span>
-							<span x-show="added" class="inline-flex items-center"><svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Added</span>
-						</button>
-						<!-- Toast -->
-						<div x-show="added" x-transition class="fixed top-20 right-4 bg-white border border-green-200 text-green-700 rounded-lg shadow p-3 text-sm">Item added to cart</div>
+						<form action="/api/v1/cart/add" method="POST" x-ref="addForm" @submit.prevent="adding=true; $refs.addForm.submit();">
+							@csrf
+							<input type="hidden" name="item_id" value="{{ $item->id }}" />
+							<input type="hidden" name="quantity" x-model.number="qty" />
+							<button type="submit" :disabled="adding" class="inline-flex items-center justify-center px-6 py-3 rounded-md text-white font-medium shadow-sm hover:shadow transition disabled:opacity-60 disabled:cursor-not-allowed" style="background:#c59d5f;">
+								<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m2.6 8L6 5H3m4 8a2 2 0 100 4 2 2 0 000-4zm10 0a2 2 0 100 4 2 2 0 000-4z"/></svg>
+								<span>
+									{{ ($item->status ?? null) === 'back_order' ? 'Order Now (Back Order)' : 'Add to cart' }}
+								</span>
+							</button>
+						</form>
 					</div>
 				</div>
 			</div>

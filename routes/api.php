@@ -9,10 +9,9 @@ use App\Http\Controllers\AddressApiController;
 // Public API endpoints (consider adding auth or sanctum later)
 Route::prefix('v1')->group(function () {
     // Cart
-    Route::post('/cart/add', [CartController::class, 'addToCart']);
-    Route::post('/cart/{itemId}/remove', [CartController::class, 'removeFromCart']);
-    Route::post('/cart/{itemId}/quantity', [CartController::class, 'updateQuantity']);
-    Route::get('/cart', [CartController::class, 'showCart']);
+    // Cart endpoints are session-enabled and defined in web routes (api/v1 with web middleware).
+    // They were removed from this file to avoid duplicate route definitions that bypass the web
+    // middleware (which provides session cookies). See routes/web.php for the cart endpoints.
 
     // Checkout
     Route::post('/checkout', [CheckoutOrderController::class, 'store']);

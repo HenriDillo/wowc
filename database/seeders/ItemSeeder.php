@@ -59,13 +59,13 @@ class ItemSeeder extends Seeder
                 'visible' => true,
             ],
             [
-                'name' => 'Preorder: Holiday Candle Set',
-                'description' => 'Limited seasonal scents. Ships on release date.',
+                'name' => 'Holiday Candle Set',
+                'description' => 'Limited seasonal scents. Available on backorder.',
                 'category' => 'Candles',
                 'price' => 899.00,
                 'stock' => 0,
                 'visible' => true,
-                'release_date' => now()->addWeeks(3)->toDateString(),
+                'status' => 'back_order',
             ],
             [
                 'name' => 'Abaca Tote Bag',

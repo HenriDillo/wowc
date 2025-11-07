@@ -17,13 +17,12 @@ class Item extends Model
         'category',
         'description',
         'status',
-        'release_date',
         'restock_date',
     ];
 
     protected $casts = [
         'visible' => 'boolean',
-        'release_date' => 'date',
+        'stock' => 'integer',
         'restock_date' => 'date',
     ];
 
@@ -53,19 +52,28 @@ class Item extends Model
         return asset('images/welcome-bg.jpg');
     }
 
-    public function isPreorder(): bool
-    {
-        return (string) ($this->status ?? '') === 'pre_order';
-    }
-
-    public function preorderLimit(): int
-    {
-        return (int) (config('app.preorder_max', 2));
-    }
-
     public function isBackorder(): bool
     {
-        return (string) ($this->status ?? '') === 'back_order';
+        $s = strtolower((string) ($this->status ?? ''));
+        return $s === 'back_order';
+    }
+
+    protected static function booted()
+    {
+        static::saving(function (Item $item) {
+            // If the status was explicitly changed by the caller, do not auto-overwrite it.
+            if ($item->isDirty('status')) {
+                return;
+            }
+
+            // Auto-set status based on stock level (admin manual overrides preserved)
+            $stock = (int) ($item->stock ?? 0);
+            if ($stock <= 0) {
+                $item->status = 'back_order';
+            } else {
+                $item->status = 'in_stock';
+            }
+        });
     }
 }
 

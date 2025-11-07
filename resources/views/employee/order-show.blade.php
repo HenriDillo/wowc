@@ -45,26 +45,45 @@
                                 <div class="flex-1">
                                     <div class="font-medium text-gray-900">{{ $oi->item?->name }}</div>
                                     <div class="text-xs text-gray-500">Qty: {{ $oi->quantity }} • ₱{{ number_format($oi->price, 2) }}</div>
-                                    @php
-                                        $notes = [];
-                                        if (($oi->is_preorder ?? false) && $oi->item?->release_date) {
-                                            $notes[] = 'Preorder — releases '.$oi->item->release_date->format('M d, Y');
-                                        }
-                                        if (($oi->is_backorder ?? false)) {
-                                            $notes[] = 'Backorder'.($oi->item?->restock_date ? ' — restock '.$oi->item->restock_date->format('M d, Y') : '');
-                                        }
-                                        if ($oi->item && !$oi->item->isPreorder() && !$oi->item->isBackorder()) {
-                                            $notes[] = 'In stock: '.$oi->item->stock;
-                                        }
-                                    @endphp
-                                    @if(!empty($notes))
-                                        <div class="text-xs text-amber-700 mt-1">{{ implode(' • ', $notes) }}</div>
-                                    @endif
+                                    <div class="mt-1 text-xs">
+                                        @if(($oi->is_backorder ?? false))
+                                            <span class="inline-flex px-2 py-0.5 rounded text-[12px] bg-blue-100 text-blue-800">Backorder</span>
+                                            <div class="text-xs text-blue-700">Status: {{ $oi->backorder_status ?? 'pending_stock' }}</div>
+                                            @if($oi->backorder_status === \App\Models\OrderItem::BO_PENDING)
+                                                <div class="mt-2 flex items-center gap-2">
+                                                    <button onclick="updateItem({{ $order->id }}, {{ $oi->id }}, 'in_progress')" class="px-3 py-1 rounded bg-yellow-100 text-yellow-800 text-xs">Mark In Progress</button>
+                                                    <button onclick="updateItem({{ $order->id }}, {{ $oi->id }}, 'fulfilled')" class="px-3 py-1 rounded bg-green-100 text-green-800 text-xs">Mark Fulfilled</button>
+                                                </div>
+                                            @elseif($oi->backorder_status === \App\Models\OrderItem::BO_IN_PROGRESS)
+                                                <div class="mt-2 flex items-center gap-2">
+                                                    <button onclick="updateItem({{ $order->id }}, {{ $oi->id }}, 'fulfilled')" class="px-3 py-1 rounded bg-green-100 text-green-800 text-xs">Mark Fulfilled</button>
+                                                </div>
+                                            @endif
+                                        @else
+                                            <div class="text-xs text-amber-700 mt-1">In stock: {{ $oi->item->stock ?? 0 }}</div>
+                                        @endif
+                                    </div>
                                 </div>
                                 <div class="text-sm font-medium">₱{{ number_format($oi->subtotal, 2) }}</div>
                             </div>
                         @endforeach
                     </div>
+                    <script>
+                        async function updateItem(orderId, itemId, status){
+                            const token = document.querySelector('meta[name="csrf-token"]').content;
+                            const res = await fetch(`/employee/orders/${orderId}/items/${itemId}/backorder`, {
+                                method: 'POST',
+                                headers: {'Content-Type':'application/json','X-CSRF-TOKEN': token, 'X-Requested-With':'XMLHttpRequest'},
+                                body: JSON.stringify({ backorder_status: status })
+                            });
+                            if(res.ok){
+                                location.reload();
+                            } else {
+                                const d = await res.json().catch(()=>({}));
+                                alert(d.message || 'Failed to update backorder status');
+                            }
+                        }
+                    </script>
                 </div>
 
                 <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">

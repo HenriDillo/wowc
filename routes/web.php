@@ -11,6 +11,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\CartController as CartPageController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Customer\OrderController as CustomerOrderController;
+use App\Http\Controllers\CustomOrderController;
 use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
@@ -21,12 +22,18 @@ Route::get('/', function () {
 Route::prefix('')->group(function () {
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');
     Route::get('/products/{item}', [ProductController::class, 'show'])->name('products.show');
-    Route::get('/cart', [CartPageController::class, 'page'])->name('cart.page');
+    // customer-facing cart page
+    Route::get('/cart', [CartPageController::class, 'page'])->name('cart');
 });
 
 // Checkout (authenticated)
 Route::middleware('auth')->group(function () {
     Route::get('/checkout', [CheckoutController::class, 'page'])->name('checkout.page');
+    
+    // Custom Orders
+    Route::get('/custom-orders/create', [CustomOrderController::class, 'create'])->name('custom-orders.create');
+    Route::post('/custom-orders', [CustomOrderController::class, 'store'])->name('custom-orders.store');
+    Route::get('/custom-orders/{id}', [CustomOrderController::class, 'show'])->name('custom-orders.show');
     Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
 });
 
@@ -65,6 +72,7 @@ Route::get('/dashboard', function () {
         $recentItems = \App\Models\Item::latest()->take(5)->get();
         $recentOrders = \App\Models\Order::latest()->take(5)->get();
 
+        $pendingBackOrders = \App\Models\OrderItem::where('is_backorder', true)->where('backorder_status', \App\Models\OrderItem::BO_PENDING)->count();
         return view('dashboard', compact(
             'totalProducts',
             'lowStockCount',
@@ -78,7 +86,8 @@ Route::get('/dashboard', function () {
             'ordersCancelled',
             'recentMaterials',
             'recentItems',
-            'recentOrders'
+            'recentOrders',
+            'pendingBackOrders'
         ));
     } else {
         $products = \App\Models\Item::query()
@@ -118,6 +127,8 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::get('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'show'])->name('orders.show');
     Route::put('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'update'])->name('orders.update');
     Route::delete('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'destroy'])->name('orders.destroy');
+    // Per-order-item backorder updates
+    Route::post('/orders/{order}/items/{item}/backorder', [\App\Http\Controllers\Employee\OrderController::class, 'updateItemBackorder'])->name('orders.items.backorder');
 });
 
 // Admin routes (authenticated, prefixed and named)
@@ -136,12 +147,23 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
 require __DIR__.'/auth.php';
 
 // Session-enabled API endpoints (cart) using web middleware
-Route::prefix('api/v1')->middleware('web')->group(function () {
-    Route::post('/cart/add', [CartController::class, 'addToCart']);
-    Route::post('/cart/{itemId}/remove', [CartController::class, 'removeFromCart']);
-    Route::post('/cart/{itemId}/quantity', [CartController::class, 'updateQuantity']);
-    Route::get('/cart', [CartController::class, 'showCart']);
+Route::prefix('api/v1')->middleware('web')->name('api.cart.')->group(function () {
+    // Regular cart operations
+    Route::post('/cart/add', [CartController::class, 'addToCart'])->name('add');
+    Route::post('/cart/{cartItemId}/remove', [CartController::class, 'removeFromCart'])->name('remove');
+    Route::post('/cart/{cartItemId}/quantity', [CartController::class, 'updateQuantity'])->name('quantity');
+    Route::get('/cart', [CartController::class, 'showCart'])->name('show');
+
+    // Custom order cart operations
+    Route::post('/cart/custom/add', [CartController::class, 'addCustomToCart'])->name('custom.add');
+    Route::post('/cart/custom/{customCartItemId}/remove', [CartController::class, 'removeCustomFromCart'])->name('custom.remove');
+    Route::post('/cart/custom/{customCartItemId}/quantity', [CartController::class, 'updateCustomQuantity'])->name('custom.quantity');
 });
+
+// Backwards-compatible non-prefixed cart endpoints used by some pages/tests (POSTs only)
+Route::post('/cart/add', [CartController::class, 'addToCart'])->name('cart.add');
+Route::post('/cart/{cartItemId}/remove', [CartController::class, 'removeFromCart'])->name('cart.remove');
+Route::post('/cart/{cartItemId}/quantity', [CartController::class, 'updateQuantity'])->name('cart.quantity');
 
 // Fallback media route when public/storage symlink isn't available
 Route::get('/media/{path}', function ($path) {
