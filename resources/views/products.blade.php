@@ -87,7 +87,12 @@
 	<!-- Page Header -->
 	<section class="pt-24 pb-6">
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-			<h1 class="text-2xl md:text-3xl font-bold text-gray-900">Products</h1>
+			<div class="flex justify-between items-center">
+				<h1 class="text-2xl md:text-3xl font-bold text-gray-900">Products</h1>
+				<a href="{{ route('custom-orders.create') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#c59d5f] hover:bg-[#b58d4f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c59d5f]">
+					Request Custom Order
+				</a>
+			</div>
 		</div>
 	</section>
 
@@ -141,10 +146,10 @@
                         <a href="{{ url('/products/'.$item->id) }}" class="group block bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition hover:-translate-y-0.5">
                             <div class="relative aspect-[4/3] bg-gray-100 rounded-t-xl overflow-hidden">
                                 <img src="{{ $item->photo_url }}" alt="{{ $item->name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
-                                @if(($item->status ?? null) === 'pre_order')
-                                    <span class="absolute top-2 left-2 inline-flex items-center px-2 py-1 text-[11px] font-semibold rounded bg-amber-100 text-amber-800">Pre-Order</span>
-                                @elseif(($item->status ?? null) === 'back_order')
-                                    <span class="absolute top-2 left-2 inline-flex items-center px-2 py-1 text-[11px] font-semibold rounded bg-blue-100 text-blue-800">Back-Order</span>
+                                @if($item->stock <= 0 || ($item->status ?? null) === 'back_order')
+                                    <span class="absolute top-2 left-2 inline-flex items-center px-2 py-1 text-[11px] font-semibold rounded bg-blue-100 text-blue-800">Back-Order Available</span>
+                                @elseif($item->stock <= 5)
+                                    <span class="absolute top-2 left-2 inline-flex items-center px-2 py-1 text-[11px] font-semibold rounded bg-yellow-100 text-yellow-800">Low Stock</span>
                                 @endif
 							</div>
 							<div class="p-4">

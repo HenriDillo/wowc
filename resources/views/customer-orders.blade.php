@@ -75,6 +75,65 @@
             <a href="/products" class="px-4 py-2 rounded-md bg-[#c59d5f] text-white hover:opacity-90">Continue Shopping</a>
         </div>
 
+        @if(!empty($backOrders) && $backOrders->isNotEmpty())
+            <div class="mb-6 bg-white border border-blue-50 rounded-xl shadow-sm p-4">
+                <h2 class="text-lg font-medium text-gray-900">Your Back Orders</h2>
+                <p class="text-sm text-blue-700 mt-1">Items awaiting stock or fulfillment. We'll notify you when they're ready.</p>
+                <div class="mt-3 divide-y">
+                    @foreach($backOrders as $bo)
+                        <div class="py-3 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <img src="{{ $bo->item?->photo_url }}" class="w-12 h-12 rounded object-cover bg-gray-100"/>
+                                <div>
+                                    <div class="font-medium text-gray-900">{{ $bo->item?->name }}</div>
+                                    <div class="text-xs text-gray-500">Qty: {{ $bo->quantity }} • Status: {{ $bo->backorder_status }}</div>
+                                    @if($bo->order?->expected_restock_date)
+                                        <div class="text-xs text-blue-700">Expected: {{ $bo->order->expected_restock_date->format('M d, Y') }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="text-sm text-gray-700">Order #{{ $bo->order->id }}</div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
+        @if(!empty($customOrders) && $customOrders->isNotEmpty())
+            <div class="mb-6 bg-white border border-yellow-50 rounded-xl shadow-sm p-4">
+                <h2 class="text-lg font-medium text-gray-900">Your Custom Orders</h2>
+                <p class="text-sm text-yellow-700 mt-1">Custom order requests currently under review or in production.</p>
+                <div class="mt-3 divide-y">
+                    @foreach($customOrders as $co)
+                        <div class="py-3 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                @if($co->reference_image_path)
+                                    <img src="{{ Storage::url($co->reference_image_path) }}" class="w-12 h-12 rounded object-cover bg-gray-100"/>
+                                @else
+                                    <div class="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-gray-400">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                        </svg>
+                                    </div>
+                                @endif
+                                <div>
+                                    <div class="font-medium text-gray-900">{{ $co->custom_name }}</div>
+                                    <div class="text-xs text-gray-500">Qty: {{ $co->quantity }} • Status: {{ ucfirst(str_replace('_', ' ', $co->status)) }}</div>
+                                    @if($co->price_estimate)
+                                        <div class="text-xs text-yellow-700">Estimated Price: ₱{{ number_format($co->price_estimate, 2) }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-2">
+                                <div class="text-sm text-gray-700">Order #{{ $co->order->id }}</div>
+                                <a href="{{ route('custom-orders.show', $co->id) }}" class="text-xs text-yellow-700 hover:underline">View Details</a>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
         <div class="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
             <table class="min-w-full divide-y divide-gray-100">
                 <thead class="bg-gray-50">

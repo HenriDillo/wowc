@@ -18,15 +18,11 @@ class OrderController extends Controller
         $orders = Order::with('items.item')->where('user_id', $user->id)->latest()->get();
         $grouped = [
             'regular' => [],
-            'preorders' => [],
             'backorders' => [],
         ];
         foreach ($orders as $order) {
-            $hasPre = $order->items->contains(function ($oi) { return (bool) ($oi->is_preorder ?? false); });
             $hasBack = $order->items->contains(function ($oi) { return (bool) ($oi->is_backorder ?? false); });
-            if ($hasPre) {
-                $grouped['preorders'][] = $order;
-            } elseif ($hasBack) {
+            if ($hasBack) {
                 $grouped['backorders'][] = $order;
             } else {
                 $grouped['regular'][] = $order;
@@ -46,7 +42,7 @@ class OrderController extends Controller
     {
         $user = Auth::user();
         $data = $request->validate([
-            'order_type' => 'required|in:standard,backorder,preorder',
+            'order_type' => 'required|in:standard,backorder',
             'payment_method' => 'nullable|in:COD,GCash,Card',
             'address' => 'nullable|array',
             'address.address_line' => 'nullable|string|max:255',
@@ -86,35 +82,99 @@ class OrderController extends Controller
                 $quantity = (int) $entry['quantity'];
                 $price = (float) $entry['price'];
 
-                if ($orderType === 'standard') {
-                    if ($item->status === 'pre_order' || $item->status === 'back_order') {
-                        // Pre/back order: do not reduce stock
-                    } else if ($item->stock >= $quantity) {
-                        $item->stock -= $quantity;
-                        $item->save();
-                    } else {
-                        abort(response()->json(['error' => 'Not enough stock for item '.$item->name], 400));
-                    }
-                } elseif ($orderType === 'backorder') {
+                // Determine whether this cart line should be treated as backorder
+                $entryBack = isset($entry['is_backorder']) ? (bool) $entry['is_backorder'] : ($item->status === 'back_order');
+
+                if ($orderType === 'backorder') {
+                    // Entire order treated as backorder: do not reduce stock for any line
                     $order->status = 'backorder';
-                } elseif ($orderType === 'preorder') {
-                    if ($item->release_date && $item->release_date->isFuture()) {
-                        $order->status = 'preorder';
-                    } else {
-                        abort(response()->json(['error' => 'This item is not available for preorder: '.$item->name], 400));
-                    }
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'item_id' => $item->id,
+                        'quantity' => $quantity,
+                        'price' => $price,
+                        'subtotal' => $price * $quantity,
+                        'is_backorder' => true,
+                        'backorder_status' => \App\Models\OrderItem::BO_PENDING,
+                    ]);
+                    continue;
                 }
 
-                $subtotalItem = $price * $quantity;
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'item_id' => $item->id,
-                    'quantity' => $quantity,
-                    'price' => $price,
-                    'subtotal' => $subtotalItem,
-                    'is_preorder' => $item->status === 'pre_order',
-                    'is_backorder' => $item->status === 'back_order',
-                ]);
+                // For standard orders, respect cart-line backorder flag first
+                if ($entryBack) {
+                    // Do not attempt to fulfill stock; create backorder order item
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'item_id' => $item->id,
+                        'quantity' => $quantity,
+                        'price' => $price,
+                        'subtotal' => $price * $quantity,
+                        'is_backorder' => true,
+                        'backorder_status' => \App\Models\OrderItem::BO_PENDING,
+                    ]);
+                    continue;
+                }
+
+                // If item is flagged as backorder-only at the product level, treat whole qty as backorder
+                if ($item->status === 'back_order') {
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'item_id' => $item->id,
+                        'quantity' => $quantity,
+                        'price' => $price,
+                        'subtotal' => $price * $quantity,
+                        'is_backorder' => true,
+                        'backorder_status' => \App\Models\OrderItem::BO_PENDING,
+                    ]);
+                    continue;
+                }
+
+                // Otherwise try to fulfill up to available stock and create a backorder for any remainder
+                $available = (int) max(0, $item->stock ?? 0);
+                if ($available >= $quantity) {
+                    $item->stock = $available - $quantity;
+                    $item->save();
+
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'item_id' => $item->id,
+                        'quantity' => $quantity,
+                        'price' => $price,
+                        'subtotal' => $price * $quantity,
+                        'is_backorder' => false,
+                    ]);
+                    continue;
+                }
+
+                // Partial fulfillment
+                if ($available > 0) {
+                    $fulfilledQty = $available;
+                    $fulfilledSubtotal = $price * $fulfilledQty;
+                    $item->stock = 0;
+                    $item->save();
+
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'item_id' => $item->id,
+                        'quantity' => $fulfilledQty,
+                        'price' => $price,
+                        'subtotal' => $fulfilledSubtotal,
+                        'is_backorder' => false,
+                    ]);
+                }
+
+                $backQty = $quantity - $available;
+                if ($backQty > 0) {
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'item_id' => $item->id,
+                        'quantity' => $backQty,
+                        'price' => $price,
+                        'subtotal' => $price * $backQty,
+                        'is_backorder' => true,
+                        'backorder_status' => \App\Models\OrderItem::BO_PENDING,
+                    ]);
+                }
             }
 
             // Persist any status change performed inside items loop

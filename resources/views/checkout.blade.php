@@ -31,12 +31,12 @@
 
 	<section class="pt-24 pb-16">
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-			<a href="/cart" class="text-sm text-[#c59d5f] hover:underline">Back to cart</a>
+            <a href="<?php echo e(route('cart')); ?>" class="text-sm text-[#c59d5f] hover:underline">Back to cart</a>
 
 			<div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-10">
 				<!-- Left: Account & Shipping -->
                 <div>
-                    <form method="POST" action="/checkout" class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+                    <form method="POST" action="{{ route('checkout.store') }}" class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
 						@csrf
 						<h2 class="text-lg font-semibold text-gray-900">Account</h2>
                         <input type="email" value="{{ $user->email ?? '' }}" disabled class="mt-3 w-full rounded-md border-gray-300"/>
@@ -85,34 +85,76 @@
 				<!-- Right: Summary -->
 				<div class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
 					<h2 class="text-lg font-semibold text-gray-900">Order Summary</h2>
-                        <div class="mt-4 space-y-4">
-                        @foreach($cartItems as $ci)
-                            <div class="flex items-center justify-between gap-4">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
-                                        <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
-                                    </div>
-                                    <div>
-                                        <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
-                                        <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
-                                        @if(($ci->item->status ?? null) === 'pre_order')
-                                            <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] rounded bg-amber-100 text-amber-800">Pre-Order</span>
-                                            @if($ci->item->release_date)
-                                                <span class="block text-[11px] text-amber-700">Ships starting {{ $ci->item->release_date->format('M d, Y') }}</span>
-                                            @endif
-                                        @elseif(($ci->item->status ?? null) === 'back_order')
-                                            <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] rounded bg-blue-100 text-blue-800">Back-Order</span>
-                                            @if($ci->item->restock_date)
-                                                <span class="block text-[11px] text-blue-700">Ships after {{ $ci->item->restock_date->format('M d, Y') }}</span>
-                                            @endif
-                                        @endif
-                                    </div>
+                        @php
+                            // Use the cart line's is_backorder flag to separate standard vs backorder
+                            $standardItems = $cartItems->filter(fn($ci) => !($ci->is_backorder ?? false));
+                            $backOrderItems = $cartItems->filter(fn($ci) => ($ci->is_backorder ?? false));
+                            $standardTotal = $standardItems->sum('subtotal');
+                            $backOrderTotal = $backOrderItems->sum('subtotal');
+                        @endphp
+
+                        <!-- Standard Items -->
+                        @if($standardItems->isNotEmpty())
+                            <div class="mt-4">
+                                <h3 class="text-sm font-medium text-gray-900">Standard Items</h3>
+                                <div class="mt-3 space-y-4">
+                                    @foreach($standardItems as $ci)
+                                        <div class="flex items-center justify-between gap-4">
+                                            <div class="flex items-center gap-3">
+                                                <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
+                                                    <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
+                                                </div>
+                                                <div>
+                                                    <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
+                                                    <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
+                                                </div>
+                                            </div>
+                                            <div class="text-right">
+                                                <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
+                                            </div>
+                                        </div>
+                                    @endforeach
                                 </div>
-                                <div class="text-right">
-                                    <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
-                                </div>
+                                @if($backOrderItems->isNotEmpty())
+                                    <p class="mt-2 text-sm text-gray-700">Standard items subtotal: ₱{{ number_format($standardTotal, 2) }}</p>
+                                @endif
                             </div>
-                        @endforeach
+                        @endif
+
+                        <!-- Back Order Items -->
+                        @if($backOrderItems->isNotEmpty())
+                            <div class="mt-6">
+                                <div class="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                    <h3 class="text-sm font-medium text-blue-800">Back Order Items</h3>
+                                    <p class="mt-1 text-xs text-blue-700">These items will be shipped separately once they're back in stock.</p>
+                                </div>
+                                <div class="space-y-4">
+                                    @foreach($backOrderItems as $ci)
+                                        <div class="flex items-center justify-between gap-4">
+                                            <div class="flex items-center gap-3">
+                                                <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
+                                                    <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
+                                                </div>
+                                                <div>
+                                                    <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
+                                                    <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
+                                                    <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] rounded bg-blue-100 text-blue-800">Back-Order</span>
+                                                    @if($ci->item->restock_date)
+                                                        <span class="block text-[11px] text-blue-700">Ships after {{ $ci->item->restock_date->format('M d, Y') }}</span>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            <div class="text-right">
+                                                <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                                @if($standardItems->isNotEmpty())
+                                    <p class="mt-2 text-sm text-gray-700">Back order items subtotal: ₱{{ number_format($backOrderTotal, 2) }}</p>
+                                @endif
+                            </div>
+                        @endif
                         </div>
 
                     <div class="mt-6 border-t pt-4 space-y-2 text-sm">
@@ -120,11 +162,8 @@
 						<div class="flex items-center justify-between"><span class="text-gray-600">Shipping</span><span>₱{{ number_format($shipping, 2) }}</span></div>
 						<div class="flex items-center justify-between font-semibold text-gray-900"><span>Total</span><span>₱{{ number_format($total, 2) }}</span></div>
 						<p class="text-xs text-gray-500 mt-2">Tax and shipping cost will be calculated later.</p>
-                        @if($cartItems->contains(fn($ci) => ($ci->item->status ?? null) === 'pre_order'))
-                            <p class="text-xs text-amber-700 mt-2">This is a pre-order. You’ll be notified once the product is available.</p>
-                        @endif
-                        @if($cartItems->contains(fn($ci) => ($ci->item->status ?? null) === 'back_order'))
-                            <p class="text-xs text-blue-700 mt-1">This item is on back order. We’ll ship it once restocked.</p>
+                        @if($cartItems->contains(fn($ci) => ($ci->is_backorder ?? false)))
+                            <p class="text-xs text-blue-700 mt-1">This item is on back order. We'll ship it once restocked.</p>
                         @endif
 					</div>
 				</div>
