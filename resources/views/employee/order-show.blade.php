@@ -23,6 +23,12 @@
             </form>
         </div>
 
+        @if(session('success'))
+            <div class="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                {{ session('success') }}
+            </div>
+        @endif
+
         <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2 space-y-6">
                 <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
@@ -35,6 +41,142 @@
                         <div>{{ $order->user?->address?->phone_number }}</div>
                     </div>
                 </div>
+
+                @if($order->customOrders->isNotEmpty())
+                    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                        <h2 class="font-semibold text-gray-900">Custom Order Details</h2>
+                        <p class="mt-1 text-sm text-gray-500">Review customer specifications and set pricing. Saving keeps the status Pending.</p>
+
+                        <div class="mt-5 space-y-6">
+                            @foreach($order->customOrders as $customOrder)
+                                <div class="border border-gray-100 rounded-lg p-4">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div class="space-y-3 text-sm text-gray-700">
+                                            <div>
+                                                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Product Name</div>
+                                                <div class="mt-1 text-gray-900 font-semibold">{{ $customOrder->custom_name }}</div>
+                                            </div>
+                                            <div>
+                                                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Customer</div>
+                                                <div class="mt-1 text-gray-900">{{ $order->user?->name ?? '—' }}</div>
+                                            </div>
+                                            <div>
+                                                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Description</div>
+                                                <div class="mt-1 text-gray-900 whitespace-pre-line">{{ $customOrder->description }}</div>
+                                            </div>
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div>
+                                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Quantity</div>
+                                                    <div class="mt-1 text-gray-900">{{ $customOrder->quantity }}</div>
+                                                </div>
+                                                <div>
+                                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Dimensions</div>
+                                                    <div class="mt-1 text-gray-900">{{ data_get($customOrder->customization_details, 'dimensions', '—') }}</div>
+                                                </div>
+                                            </div>
+                                            @if(data_get($customOrder->customization_details, 'additional_instructions'))
+                                                <div>
+                                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Additional Instructions</div>
+                                                    <div class="mt-1 text-gray-900 whitespace-pre-line">{{ data_get($customOrder->customization_details, 'additional_instructions') }}</div>
+                                                </div>
+                                            @endif
+                                            <div>
+                                                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Status</div>
+                                                <span class="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                    {{ str_replace('_',' ', ucfirst($customOrder->status)) }}
+                                                </span>
+                                            </div>
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div>
+                                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Current Price</div>
+                                                    <div class="mt-1 text-gray-900 font-semibold">
+                                                        @if(!is_null($customOrder->price_estimate))
+                                                            ₱{{ number_format((float)$customOrder->price_estimate, 2) }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Estimated Completion</div>
+                                                    <div class="mt-1 text-gray-900">
+                                                        {{ optional($customOrder->estimated_completion_date)->format('M d, Y') ?? '—' }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            @if($customOrder->admin_notes)
+                                                <div>
+                                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Internal Notes</div>
+                                                    <div class="mt-1 text-gray-700 whitespace-pre-line">{{ $customOrder->admin_notes }}</div>
+                                                </div>
+                                            @endif
+                                        </div>
+
+                                        <div class="space-y-3">
+                                            @if($customOrder->reference_image_path)
+                                                <div>
+                                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Reference Image</div>
+                                                    <img src="{{ \Illuminate\Support\Facades\Storage::url($customOrder->reference_image_path) }}" alt="Reference Image" class="rounded-lg border border-gray-200 shadow-sm max-h-80 object-contain w-full bg-gray-50">
+                                                </div>
+                                            @endif
+
+                                            <form method="POST" action="{{ route('employee.custom-orders.update', $customOrder->id) }}" class="space-y-4">
+                                                @csrf
+                                                @method('PUT')
+                                                <div>
+                                                    <label for="price_estimate_{{ $customOrder->id }}" class="block text-sm font-medium text-gray-700">Final Price</label>
+                                                    <input type="number" min="0" step="0.01" id="price_estimate_{{ $customOrder->id }}" name="price_estimate" value="{{ old('price_estimate', $customOrder->price_estimate) }}" class="mt-1 block w-full rounded-md border-gray-300 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
+                                                    @error('price_estimate')
+                                                        <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                                                    @enderror
+                                                </div>
+                                                <div>
+                                                    <label for="admin_notes_{{ $customOrder->id }}" class="block text-sm font-medium text-gray-700">Internal Notes</label>
+                                                    <textarea id="admin_notes_{{ $customOrder->id }}" name="admin_notes" rows="4" class="mt-1 block w-full rounded-md border-gray-300 focus:border-[#c59d5f] focus:ring-[#c59d5f]">{{ old('admin_notes', $customOrder->admin_notes) }}</textarea>
+                                                    @error('admin_notes')
+                                                        <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                                                    @enderror
+                                                </div>
+                                                <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-semibold shadow-sm hover:opacity-95 w-full md:w-auto" style="background:#c59d5f;">
+                                                    Save Review (Keep Pending)
+                                                </button>
+                                            </form>
+
+                                            <form method="POST" action="{{ route('employee.custom-orders.confirm', $customOrder->id) }}" class="space-y-4 border-t border-gray-100 pt-4 mt-4">
+                                                @csrf
+                                                @method('PUT')
+                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label for="confirm_price_{{ $customOrder->id }}" class="block text-sm font-medium text-gray-700">Confirmed Price</label>
+                                                        <input type="number" min="0" step="0.01" id="confirm_price_{{ $customOrder->id }}" name="price_estimate" value="{{ old('price_estimate', $customOrder->price_estimate) }}" class="mt-1 block w-full rounded-md border-gray-300 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
+                                                    </div>
+                                                    @error('price_estimate')
+                                                        <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                                                    @enderror
+                                                    <div>
+                                                        <label for="estimated_completion_date_{{ $customOrder->id }}" class="block text-sm font-medium text-gray-700">Estimated Completion Date</label>
+                                                        <input type="date" id="estimated_completion_date_{{ $customOrder->id }}" name="estimated_completion_date" value="{{ old('estimated_completion_date', optional($customOrder->estimated_completion_date)->format('Y-m-d')) }}" class="mt-1 block w-full rounded-md border-gray-300 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
+                                                    </div>
+                                                </div>
+                                                @error('estimated_completion_date')
+                                                    <p class="text-xs text-red-600">{{ $message }}</p>
+                                                @enderror
+                                                <div>
+                                                    <label for="confirm_admin_notes_{{ $customOrder->id }}" class="block text-sm font-medium text-gray-700">Internal Notes (Optional)</label>
+                                                    <textarea id="confirm_admin_notes_{{ $customOrder->id }}" name="admin_notes" rows="3" class="mt-1 block w-full rounded-md border-gray-300 focus:border-[#c59d5f] focus:ring-[#c59d5f]">{{ old('admin_notes', $customOrder->admin_notes) }}</textarea>
+                                                </div>
+                                                <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-semibold shadow-sm hover:opacity-95 w-full md:w-auto" style="background:#2f855a;">
+                                                    Confirm &amp; Start Production
+                                                </button>
+                                                <p class="text-xs text-gray-500">Confirmation sets status to In Progress and updates dashboards.</p>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
 
                 <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                     <h2 class="font-semibold text-gray-900">Items</h2>

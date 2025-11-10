@@ -19,14 +19,14 @@
 				<!-- Logo -->
 				<div class="flex items-center">
 					<img src="/images/logo.png" alt="WOW Carmen" class="w-8 h-8 mr-3"/>
-					<a href="/" class="text-lg sm:text-xl font-semibold text-gray-900 tracking-wide">WOW Carmen</a>
+					<a href="{{ route('dashboard') }}" class="text-lg sm:text-xl font-semibold text-gray-900 tracking-wide">WOW Carmen</a>
 				</div>
 
 				<!-- Links -->
 				<div class="hidden md:flex items-center space-x-8">
-					<a href="/dashboard" class="text-gray-700 hover:text-[#c59d5f] text-sm font-medium transition-colors">Home</a>
-					<a href="/products" class="text-gray-700 hover:text-[#c59d5f] text-sm font-medium transition-colors">Products</a>
-					<a href="/contact" class="text-gray-700 hover:text-[#c59d5f] text-sm font-medium transition-colors">Contact us</a>
+					<a href="{{ route('dashboard') }}" class="text-gray-700 hover:text-[#c59d5f] text-sm font-medium transition-colors">Home</a>
+					<a href="{{ route('products.index') }}" class="text-gray-700 hover:text-[#c59d5f] text-sm font-medium transition-colors">Products</a>
+					<a href="{{ route('custom-order') }}" class="text-gray-700 hover:text-[#c59d5f] text-sm font-medium transition-colors">Custom Order</a>
 				</div>
 
 				<!-- Right icons -->
@@ -57,7 +57,7 @@
 							@endauth
 						</div>
 					</div>
-					<a href="/cart" class="text-gray-700 hover:text-[#c59d5f] transition-colors" aria-label="Cart">
+					<a href="{{ route('cart') }}" class="text-gray-700 hover:text-[#c59d5f] transition-colors" aria-label="Cart">
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m2.6 8L6 5H3m4 8a2 2 0 100 4 2 2 0 000-4zm10 0a2 2 0 100 4 2 2 0 000-4z"/></svg>
 					</a>
 				</div>
@@ -76,9 +76,9 @@
 			<!-- Mobile Menu -->
 			<div x-show="mobileMenuOpen" x-cloak x-transition class="md:hidden bg-white border-t border-gray-200">
 				<div class="px-2 pt-2 pb-3 space-y-1">
-					<a href="/" class="block px-3 py-2 text-gray-700 hover:text-[#c59d5f] hover:bg-gray-50 rounded-md text-base font-medium">Home</a>
-					<a href="/products" class="block px-3 py-2 text-gray-700 hover:text-[#c59d5f] hover:bg-gray-50 rounded-md text-base font-medium">Products</a>
-					<a href="/contact" class="block px-3 py-2 text-gray-700 hover:text-[#c59d5f] hover:bg-gray-50 rounded-md text-base font-medium">Contact us</a>
+					<a href="{{ route('dashboard') }}" class="block px-3 py-2 text-gray-700 hover:text-[#c59d5f] hover:bg-gray-50 rounded-md text-base font-medium">Home</a>
+					<a href="{{ route('products.index') }}" class="block px-3 py-2 text-gray-700 hover:text-[#c59d5f] hover:bg-gray-50 rounded-md text-base font-medium">Products</a>
+					<a href="{{ route('custom-order') }}" class="block px-3 py-2 text-gray-700 hover:text-[#c59d5f] hover:bg-gray-50 rounded-md text-base font-medium">Custom Order</a>
 				</div>
 			</div>
 		</div>
@@ -89,9 +89,6 @@
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 			<div class="flex justify-between items-center">
 				<h1 class="text-2xl md:text-3xl font-bold text-gray-900">Products</h1>
-				<a href="{{ route('custom-orders.create') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#c59d5f] hover:bg-[#b58d4f] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#c59d5f]">
-					Request Custom Order
-				</a>
 			</div>
 		</div>
 	</section>
@@ -184,7 +181,7 @@
 				<div>
 					<h4 class="text-lg font-semibold mb-4">Info</h4>
 					<ul class="space-y-2 text-gray-300">
-						<li><a href="/contact" class="hover:text-[#c59d5f] transition-colors">Contact Us</a></li>
+						<li><a href="{{ route('custom-order') }}" class="hover:text-[#c59d5f] transition-colors">Custom Order</a></li>
 						<li><a href="#" class="hover:text-[#c59d5f] transition-colors">Privacy Policy</a></li>
 						<li><a href="#" class="hover:text-[#c59d5f] transition-colors">Terms &amp; Conditions</a></li>
 					</ul>

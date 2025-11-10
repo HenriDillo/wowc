@@ -39,9 +39,8 @@ class CartController extends Controller
 			'custom_name' => 'required|string|max:255',
 			'description' => 'required|string',
 			'customization_details' => 'required|array',
-			'customization_details.color' => 'required|string',
-			'customization_details.material' => 'required|string',
-			'reference_image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+			'customization_details.dimensions' => 'required|string',
+			'reference_image' => 'required|image|mimes:jpeg,png,jpg|max:5120',
 			'quantity' => 'required|integer|min:1',
 		]);
 
