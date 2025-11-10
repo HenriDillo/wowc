@@ -20,12 +20,14 @@ class CustomOrder extends Model
         'price_estimate',
         'status',
         'admin_notes',
+        'estimated_completion_date',
     ];
 
     protected $casts = [
         'customization_details' => 'array',
         'quantity' => 'integer',
         'price_estimate' => 'decimal:2',
+        'estimated_completion_date' => 'date',
     ];
 
     const STATUS_PENDING_REVIEW = 'pending_review';

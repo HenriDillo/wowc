@@ -71,7 +71,11 @@ class OrderController extends Controller
 
     public function show($id)
     {
-        $order = Order::with(['user.address', 'items.item.photos'])->findOrFail($id);
+        $order = Order::with([
+            'user.address',
+            'items.item.photos',
+            'customOrders',
+        ])->findOrFail($id);
         // If the request expects JSON (modal usage), return JSON; otherwise render a full details page
         if (request()->expectsJson()) {
             return response()->json($order);

@@ -24,16 +24,21 @@ Route::prefix('')->group(function () {
     Route::get('/products/{item}', [ProductController::class, 'show'])->name('products.show');
     // customer-facing cart page
     Route::get('/cart', [CartPageController::class, 'page'])->name('cart');
+    
+    // Custom Orders - Public Access for Create Form
+    Route::get('/custom-order', [CustomOrderController::class, 'create'])->name('custom-order');
+    Route::get('/custom-orders/create', [CustomOrderController::class, 'create'])->name('custom-orders.create');
 });
 
 // Checkout (authenticated)
 Route::middleware('auth')->group(function () {
     Route::get('/checkout', [CheckoutController::class, 'page'])->name('checkout.page');
     
-    // Custom Orders
-    Route::get('/custom-orders/create', [CustomOrderController::class, 'create'])->name('custom-orders.create');
-    Route::post('/custom-orders', [CustomOrderController::class, 'store'])->name('custom-orders.store');
-    Route::get('/custom-orders/{id}', [CustomOrderController::class, 'show'])->name('custom-orders.show');
+    // Custom Orders - Authenticated Actions
+    Route::prefix('custom-orders')->name('custom-orders.')->group(function () {
+        Route::post('/', [CustomOrderController::class, 'store'])->name('store');
+        Route::get('/{id}', [CustomOrderController::class, 'show'])->name('show');
+    });
     Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
 });
 
@@ -129,6 +134,11 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::delete('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'destroy'])->name('orders.destroy');
     // Per-order-item backorder updates
     Route::post('/orders/{order}/items/{item}/backorder', [\App\Http\Controllers\Employee\OrderController::class, 'updateItemBackorder'])->name('orders.items.backorder');
+
+    // Custom Orders - Employee review
+    Route::get('/custom-orders/{id}', [\App\Http\Controllers\Employee\CustomOrderController::class, 'show'])->name('custom-orders.show');
+    Route::put('/custom-orders/{id}', [\App\Http\Controllers\Employee\CustomOrderController::class, 'update'])->name('custom-orders.update');
+    Route::put('/custom-orders/{id}/confirm', [\App\Http\Controllers\Employee\CustomOrderController::class, 'confirm'])->name('custom-orders.confirm');
 });
 
 // Admin routes (authenticated, prefixed and named)

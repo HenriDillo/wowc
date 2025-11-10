@@ -54,11 +54,11 @@
                                 Orders
                             </a>
                         @endif
-                        <a href="{{ route('products') }}" class="nav-link {{ request()->routeIs('products*') ? 'nav-link-active' : '' }}">
+                        <a href="{{ route('products.index') }}" class="nav-link {{ request()->routeIs('products*') ? 'nav-link-active' : '' }}">
                             Products
                         </a>
-                        <a href="{{ route('contact') }}" class="nav-link {{ request()->routeIs('contact') ? 'nav-link-active' : '' }}">
-                            Contact
+                        <a href="{{ route('custom-order') }}" class="nav-link {{ request()->routeIs('custom-order') ? 'nav-link-active' : '' }}">
+                            Custom Order
                         </a>
                     </div>
                 </div>
@@ -69,9 +69,9 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
-                        @if(Cart::count() > 0)
+                        @if(\App\Models\Cart::count() > 0)
                             <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                                {{ Cart::count() }}
+                                {{ \App\Models\Cart::count() }}
                             </span>
                         @endif
                     </a>
@@ -141,17 +141,17 @@
                         Orders
                     </a>
                 @endif
-                <a href="{{ route('products') }}" class="block px-3 py-2 text-base font-medium {{ request()->routeIs('products*') ? 'text-primary' : 'text-gray-700 hover:text-primary' }}">
+                <a href="{{ route('products.index') }}" class="block px-3 py-2 text-base font-medium {{ request()->routeIs('products*') ? 'text-primary' : 'text-gray-700 hover:text-primary' }}">
                     Products
                 </a>
-                <a href="{{ route('contact') }}" class="block px-3 py-2 text-base font-medium {{ request()->routeIs('contact') ? 'text-primary' : 'text-gray-700 hover:text-primary' }}">
-                    Contact
+                <a href="{{ route('custom-order') }}" class="block px-3 py-2 text-base font-medium {{ request()->routeIs('custom-order') ? 'text-primary' : 'text-gray-700 hover:text-primary' }}">
+                    Custom Order
                 </a>
 
                 <div class="border-t border-gray-200 my-3"></div>
 
                 <a href="{{ route('cart') }}" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-primary">
-                    Cart ({{ Cart::count() }})
+                    Cart ({{ \App\Models\Cart::count() }})
                 </a>
                 <a href="{{ route('profile.edit') }}" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-primary">
                     Profile
