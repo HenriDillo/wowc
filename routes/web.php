@@ -12,6 +12,7 @@ use App\Http\Controllers\CartController as CartPageController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Customer\OrderController as CustomerOrderController;
 use App\Http\Controllers\CustomOrderController;
+use App\Http\Controllers\PaymentController;
 use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
@@ -162,18 +163,22 @@ Route::prefix('api/v1')->middleware('web')->name('api.cart.')->group(function ()
     Route::post('/cart/add', [CartController::class, 'addToCart'])->name('add');
     Route::post('/cart/{cartItemId}/remove', [CartController::class, 'removeFromCart'])->name('remove');
     Route::post('/cart/{cartItemId}/quantity', [CartController::class, 'updateQuantity'])->name('quantity');
-    Route::get('/cart', [CartController::class, 'showCart'])->name('show');
+		Route::get('/cart', [CartController::class, 'showCart'])->name('show');
 
-    // Custom order cart operations
-    Route::post('/cart/custom/add', [CartController::class, 'addCustomToCart'])->name('custom.add');
-    Route::post('/cart/custom/{customCartItemId}/remove', [CartController::class, 'removeCustomFromCart'])->name('custom.remove');
-    Route::post('/cart/custom/{customCartItemId}/quantity', [CartController::class, 'updateCustomQuantity'])->name('custom.quantity');
+	// Item stock endpoint for real-time stock visibility on product pages
+	Route::get('/items/{item}/stock', [ProductController::class, 'stock'])->name('api.item.stock');
 });
 
 // Backwards-compatible non-prefixed cart endpoints used by some pages/tests (POSTs only)
 Route::post('/cart/add', [CartController::class, 'addToCart'])->name('cart.add');
 Route::post('/cart/{cartItemId}/remove', [CartController::class, 'removeFromCart'])->name('cart.remove');
 Route::post('/cart/{cartItemId}/quantity', [CartController::class, 'updateQuantity'])->name('cart.quantity');
+
+// Payments (AJAX)
+Route::middleware('auth')->group(function () {
+	Route::post('/payments/gcash', [PaymentController::class, 'confirmGCash'])->name('payments.gcash');
+	Route::post('/payments/bank', [PaymentController::class, 'uploadBankProof'])->name('payments.bank');
+});
 
 // Fallback media route when public/storage symlink isn't available
 Route::get('/media/{path}', function ($path) {

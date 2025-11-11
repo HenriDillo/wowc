@@ -146,12 +146,21 @@
                                 @if($item->stock <= 0 || ($item->status ?? null) === 'back_order')
                                     <span class="absolute top-2 left-2 inline-flex items-center px-2 py-1 text-[11px] font-semibold rounded bg-blue-100 text-blue-800">Back-Order Available</span>
                                 @elseif($item->stock <= 5)
-                                    <span class="absolute top-2 left-2 inline-flex items-center px-2 py-1 text-[11px] font-semibold rounded bg-yellow-100 text-yellow-800">Low Stock</span>
+                                    <span class="absolute top-2 left-2 inline-flex items-center px-2 py-1 text-[11px] font-semibold rounded bg-yellow-100 text-yellow-800">Low Stock ({{ $item->stock }})</span>
+                                @else
+                                    <span class="absolute top-2 left-2 inline-flex items-center px-2 py-1 text-[11px] font-semibold rounded bg-green-100 text-green-800">In Stock ({{ $item->stock }})</span>
                                 @endif
 							</div>
 							<div class="p-4">
 								<h3 class="text-sm md:text-base font-medium text-gray-900 truncate">{{ $item->name }}</h3>
 								<p class="mt-1 text-[#c59d5f] font-semibold">₱{{ number_format($item->price, 2) }}</p>
+								<p class="mt-2 text-xs text-gray-600">
+									@if($item->stock <= 0 || ($item->status ?? null) === 'back_order')
+										Available on back order
+									@else
+										{{ $item->stock }} in stock
+									@endif
+								</p>
 							</div>
 						</a>
 					@endforeach

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\CustomOrder;
+use App\Models\Payment;
 
 class Order extends Model
 {
@@ -21,11 +22,15 @@ class Order extends Model
         'payment_status',
         'back_order_status',
         'expected_restock_date',
+        'tracking_number',
+        'carrier',
+        'delivered_at',
     ];
 
     protected $casts = [
         'total_amount' => 'decimal:2',
         'expected_restock_date' => 'date',
+        'delivered_at' => 'datetime',
     ];
 
     const STATUS_PENDING = 'pending';
@@ -82,5 +87,10 @@ class Order extends Model
     {
         return $this->hasMany(CustomOrder::class);
     }
+
+	public function payments(): HasMany
+	{
+		return $this->hasMany(Payment::class);
+	}
 }
 

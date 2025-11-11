@@ -9,6 +9,7 @@
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 	<script src="https://cdn.tailwindcss.com"></script>
 	<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+	<meta name="csrf-token" content="{{ csrf_token() }}">
 </head>
 <body x-data="{ dropdownOpen:false, mobileMenuOpen:false, scrolled:false, method:'Bank' }" @scroll.window="scrolled = window.scrollY > 4" class="bg-white" style="font-family:'Poppins','Inter',ui-sans-serif,system-ui;">
 
@@ -40,6 +41,9 @@
 						@csrf
 						<h2 class="text-lg font-semibold text-gray-900">Account</h2>
                         <input type="email" value="{{ $user->email ?? '' }}" disabled class="mt-3 w-full rounded-md border-gray-300"/>
+                        @if(isset($payOrder) && $payOrder)
+							<p class="mt-2 text-sm text-gray-700">Pay for Custom Order <span class="font-medium">#{{ $payOrder->id }}</span>. Choose a payment method below to complete your purchase.</p>
+                        @endif
 
                         @if ($errors->any())
                             <div class="mt-4 text-sm text-red-600">
@@ -64,6 +68,9 @@
                         </div>
 
 						<h3 class="mt-6 text-lg font-semibold text-gray-900">Payment</h3>
+                        <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                            <p class="text-sm text-blue-800"><strong>Important:</strong> Payment is required to complete your order. Please select a payment method below.</p>
+                        </div>
                         <div class="mt-3 grid grid-cols-2 gap-3">
 							<label class="flex items-center justify-center gap-2 border rounded-md p-3 cursor-pointer hover:border-gray-400">
                                 <input type="radio" name="payment_method" value="Bank" x-model="method" class="hidden">
@@ -77,7 +84,7 @@
 						</div>
 
 						<div class="mt-6 text-right">
-							<button class="inline-flex items-center justify-center px-6 py-3 rounded-md text-white font-medium shadow-sm hover:shadow transition" style="background:#c59d5f;">Complete Order</button>
+							<button id="completeBtn" type="button" class="inline-flex items-center justify-center px-6 py-3 rounded-md text-white font-medium shadow-sm hover:shadow transition" style="background:#c59d5f;">Complete Order</button>
 						</div>
 					</form>
 				</div>
@@ -86,15 +93,16 @@
 				<div class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
 					<h2 class="text-lg font-semibold text-gray-900">Order Summary</h2>
                         @php
+							$paymentOnly = isset($payOrder) && $payOrder;
                             // Use the cart line's is_backorder flag to separate standard vs backorder
-                            $standardItems = $cartItems->filter(fn($ci) => !($ci->is_backorder ?? false));
-                            $backOrderItems = $cartItems->filter(fn($ci) => ($ci->is_backorder ?? false));
-                            $standardTotal = $standardItems->sum('subtotal');
-                            $backOrderTotal = $backOrderItems->sum('subtotal');
+                            $standardItems = $paymentOnly ? collect() : $cartItems->filter(fn($ci) => !($ci->is_backorder ?? false));
+                            $backOrderItems = $paymentOnly ? collect() : $cartItems->filter(fn($ci) => ($ci->is_backorder ?? false));
+                            $standardTotal = $paymentOnly ? 0 : $standardItems->sum('subtotal');
+                            $backOrderTotal = $paymentOnly ? 0 : $backOrderItems->sum('subtotal');
                         @endphp
 
                         <!-- Standard Items -->
-                        @if($standardItems->isNotEmpty())
+                        @if(!$paymentOnly && $standardItems->isNotEmpty())
                             <div class="mt-4">
                                 <h3 class="text-sm font-medium text-gray-900">Standard Items</h3>
                                 <div class="mt-3 space-y-4">
@@ -122,7 +130,7 @@
                         @endif
 
                         <!-- Back Order Items -->
-                        @if($backOrderItems->isNotEmpty())
+                        @if(!$paymentOnly && $backOrderItems->isNotEmpty())
                             <div class="mt-6">
                                 <div class="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
                                     <h3 class="text-sm font-medium text-blue-800">Back Order Items</h3>
@@ -158,11 +166,34 @@
                         </div>
 
                     <div class="mt-6 border-t pt-4 space-y-2 text-sm">
-						<div class="flex items-center justify-between"><span class="text-gray-600">Subtotal</span><span>₱{{ number_format($subtotal, 2) }}</span></div>
-						<div class="flex items-center justify-between"><span class="text-gray-600">Shipping</span><span>₱{{ number_format($shipping, 2) }}</span></div>
+						@if($paymentOnly)
+							@php
+								$coStatus = optional($payOrder->customOrders->first())->status ?? $payOrder->status;
+								$badge = match($coStatus){
+									'in_production' => 'bg-blue-100 text-blue-800',
+									'pending_review' => 'bg-yellow-100 text-yellow-800',
+									'approved' => 'bg-green-100 text-green-800',
+									'rejected' => 'bg-red-100 text-red-800',
+									'completed' => 'bg-gray-100 text-gray-800',
+									default => 'bg-gray-100 text-gray-800',
+								};
+								$coStatusLabel = ucfirst(str_replace('_',' ', $coStatus ?? 'pending'));
+							@endphp
+							<div class="mb-3 p-3 border border-gray-200 rounded-lg">
+								<div class="text-sm font-medium text-gray-900">Custom Order #{{ $payOrder->id }}</div>
+								<div class="mt-1 text-xs text-gray-600 flex items-center gap-2">
+									<span>Status:</span>
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium {{ $badge }}">{{ $coStatusLabel }}</span>
+								</div>
+							</div>
+						@endif
+						<div class="flex items-center justify-between"><span class="text-gray-600">Subtotal</span><span>₱{{ number_format($total, 2) }}</span></div>
+						@if(!$paymentOnly)
+							<div class="flex items-center justify-between"><span class="text-gray-600">Shipping</span><span>₱{{ number_format($shipping, 2) }}</span></div>
+						@endif
 						<div class="flex items-center justify-between font-semibold text-gray-900"><span>Total</span><span>₱{{ number_format($total, 2) }}</span></div>
 						<p class="text-xs text-gray-500 mt-2">Tax and shipping cost will be calculated later.</p>
-                        @if($cartItems->contains(fn($ci) => ($ci->is_backorder ?? false)))
+                        @if(!$paymentOnly && $cartItems->contains(fn($ci) => ($ci->is_backorder ?? false)))
                             <p class="text-xs text-blue-700 mt-1">This item is on back order. We'll ship it once restocked.</p>
                         @endif
 					</div>
@@ -170,6 +201,44 @@
 			</div>
 		</div>
 	</section>
+
+	<!-- GCash Modal -->
+	<div id="gcashModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+		<div class="w-full max-w-md bg-white rounded-xl shadow-lg overflow-hidden">
+			<div class="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
+				<h2 class="font-semibold">GCash Payment</h2>
+				<button onclick="closeModal('gcashModal')" class="text-gray-500 hover:text-gray-700">✕</button>
+			</div>
+			<div class="p-5 space-y-4">
+				<div class="text-sm text-gray-700">Scan the QR code and enter a fake reference number to simulate payment.</div>
+				<img src="/images/gcash-qr.png" alt="GCash QR" class="w-full rounded border" />
+				<input id="gcashRef" type="text" placeholder="Reference Number" class="w-full rounded-md border-gray-300" />
+				<button id="gcashConfirmBtn" class="w-full px-4 py-2 rounded-md text-white" style="background:#0ea5e9;">Confirm Payment</button>
+				<p id="gcashErr" class="hidden text-sm text-red-600"></p>
+			</div>
+		</div>
+	</div>
+
+	<!-- Bank Transfer Modal -->
+	<div id="bankModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+		<div class="w-full max-w-md bg-white rounded-xl shadow-lg overflow-hidden">
+			<div class="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
+				<h2 class="font-semibold">Bank Transfer</h2>
+				<button onclick="closeModal('bankModal')" class="text-gray-500 hover:text-gray-700">✕</button>
+			</div>
+			<div class="p-5 space-y-4">
+				<div class="text-sm text-gray-700">
+					<strong>BPI</strong><br>
+					Account Name: WOW Carmen<br>
+					Account Number: 1234-5678-90
+				</div>
+				<label class="block text-sm text-gray-700">Upload Deposit Slip</label>
+				<input id="bankProof" type="file" accept="image/*" class="w-full rounded-md border-gray-300" />
+				<button id="bankSubmitBtn" class="w-full px-4 py-2 rounded-md text-white" style="background:#c59d5f;">Submit Proof</button>
+				<p id="bankErr" class="hidden text-sm text-red-600"></p>
+			</div>
+		</div>
+	</div>
 
 	<!-- Footer -->
 	<footer class="bg-[#1a1a1a] text-white">
@@ -198,5 +267,114 @@
 
 </body>
 </html>
+
+<script>
+const csrf = document.querySelector('meta[name="csrf-token"]').content;
+const completeBtn = document.getElementById('completeBtn');
+const form = document.querySelector('form[action="{{ route('checkout.store') }}"]');
+const gcashModal = document.getElementById('gcashModal');
+const bankModal = document.getElementById('bankModal');
+// If paying an existing order, expose IDs for JS
+window.payOrderId = {{ isset($payOrder) && $payOrder ? $payOrder->id : 'null' }};
+window.payAmount = {{ isset($payOrder) && $payOrder ? (float) $payOrder->total_amount : 0 }};
+
+function openModal(id){ const el = document.getElementById(id); el.classList.remove('hidden'); el.classList.add('flex'); }
+function closeModal(id){ const el = document.getElementById(id); el.classList.add('hidden'); el.classList.remove('flex'); }
+
+async function createOrder() {
+	// If this is payment-only for an existing order, skip order creation
+	if(window.payOrderId){
+		return { success: true, order_id: window.payOrderId, total: window.payAmount };
+	}
+	const data = new FormData(form);
+	const res = await fetch(form.action, { 
+		method:'POST', 
+		headers: { 'Accept':'application/json', 'X-CSRF-TOKEN': csrf }, 
+		body: data 
+	});
+	
+	// Check content type to ensure we're getting JSON
+	const contentType = res.headers.get('content-type');
+	if(!contentType || !contentType.includes('application/json')) {
+		const text = await res.text();
+		console.error('Response is not JSON:', text);
+		throw new Error('Server error: Invalid response format. Please check form validation.');
+	}
+	
+	const json = await res.json();
+	if(!json?.success){ throw new Error(json?.message || 'Order creation failed'); }
+	return json;
+}
+
+completeBtn.addEventListener('click', async () => {
+	// Validate form first
+	if (!form.checkValidity()) {
+		form.reportValidity();
+		return;
+	}
+
+	const selected = document.querySelector('input[name="payment_method"]:checked')?.value || null;
+	
+	if (!selected) {
+		alert('Please select a payment method (GCash or Bank Transfer) to proceed.');
+		return;
+	}
+
+	if(selected === 'GCash'){
+		openModal('gcashModal');
+	} else if(selected === 'Bank'){
+		openModal('bankModal');
+	} else {
+		alert('Please select a valid payment method.');
+	}
+});
+
+document.getElementById('gcashConfirmBtn').addEventListener('click', async () => {
+	const ref = document.getElementById('gcashRef').value.trim();
+	const err = document.getElementById('gcashErr');
+	err.classList.add('hidden'); err.textContent = '';
+	if(ref.length < 6){ err.textContent = 'Reference number must be at least 6 characters.'; err.classList.remove('hidden'); return; }
+	try{
+		const o = await createOrder();
+		const params = new URLSearchParams({ order_id: o.order_id, amount: o.total, reference: ref });
+		const res = await fetch('{{ route('payments.gcash') }}', { method:'POST', headers:{ 'X-CSRF-TOKEN': csrf }, body: params });
+		if(!res.ok) {
+			const errData = await res.json().catch(() => ({}));
+			throw new Error(errData?.message || 'Failed to confirm GCash payment');
+		}
+		closeModal('gcashModal');
+		location.href = `/customer/orders/${o.order_id}`;
+	}catch(e){ 
+		err.textContent = e.message || 'Payment failed.'; 
+		err.classList.remove('hidden'); 
+		console.error('GCash payment error:', e);
+	}
+});
+
+document.getElementById('bankSubmitBtn').addEventListener('click', async () => {
+	const file = document.getElementById('bankProof').files[0];
+	const err = document.getElementById('bankErr');
+	err.classList.add('hidden'); err.textContent = '';
+	if(!file){ err.textContent = 'Please upload an image of the deposit slip.'; err.classList.remove('hidden'); return; }
+	try{
+		const o = await createOrder();
+		const fd = new FormData();
+		fd.append('order_id', o.order_id);
+		fd.append('amount', o.total);
+		fd.append('proof', file);
+		const res = await fetch('{{ route('payments.bank') }}', { method:'POST', headers:{ 'X-CSRF-TOKEN': csrf }, body: fd });
+		if(!res.ok) {
+			const errData = await res.json().catch(() => ({}));
+			throw new Error(errData?.message || 'Failed to upload bank proof');
+		}
+		closeModal('bankModal');
+		location.href = `/customer/orders/${o.order_id}`;
+	}catch(e){ 
+		err.textContent = e.message || 'Upload failed.'; 
+		err.classList.remove('hidden'); 
+		console.error('Bank transfer error:', e);
+	}
+});
+</script>
 
 

@@ -65,18 +65,20 @@ class CustomOrderController extends Controller
 		$customOrder->price_estimate = $validated['price_estimate'];
 		$customOrder->admin_notes = $validated['admin_notes'] ?? null;
 		$customOrder->estimated_completion_date = $validated['estimated_completion_date'];
-		$customOrder->status = CustomOrder::STATUS_IN_PRODUCTION;
+		// Move to Approved (awaiting payment); production will begin after payment is recorded
+		$customOrder->status = CustomOrder::STATUS_APPROVED;
 		$customOrder->save();
 
 		if ($customOrder->order) {
-			$customOrder->order->status = Order::STATUS_PROCESSING;
+			// Awaiting customer payment
+			$customOrder->order->status = Order::STATUS_PENDING;
 			$customOrder->order->total_amount = $customOrder->price_estimate ?? $customOrder->order->total_amount;
 			$customOrder->order->save();
 		}
 
 		return redirect()
 			->back()
-			->with('success', 'Custom order confirmed and moved to In Progress.');
+			->with('success', 'Custom order confirmed and awaiting payment.');
 	}
 }
 

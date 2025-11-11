@@ -124,7 +124,7 @@
 							$statusText = 'Available for Back Order';
 							$statusColor = 'text-blue-600';
 						} else {
-							$statusText = $stock > 10 ? 'In Stock' : ($stock > 0 ? 'Low Stock' : 'Out of Stock — Available for Back Order');
+							$statusText = $stock > 10 ? 'In Stock (' . $stock . ' available)' : ($stock > 0 ? 'Low Stock (' . $stock . ' left)' : 'Out of Stock — Available for Back Order');
 							$statusColor = $stock > 10 ? 'text-green-600' : ($stock > 0 ? 'text-amber-600' : 'text-blue-600');
 						}
 					@endphp
@@ -140,6 +140,10 @@
 					@elseif($stock <= 5)
 						<div class="mt-3 p-3 bg-yellow-50 border border-yellow-100 rounded-lg">
 							<p class="text-sm text-yellow-800">Only {{ $stock }} items left in stock. Order soon!</p>
+						</div>
+					@else
+						<div class="mt-3 p-3 bg-green-50 border border-green-100 rounded-lg">
+							<p class="text-sm text-green-800">{{ $stock }} items available. Plenty of stock!</p>
 						</div>
 					@endif
 

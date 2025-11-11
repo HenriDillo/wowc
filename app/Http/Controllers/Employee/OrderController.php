@@ -11,7 +11,11 @@ class OrderController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Order::query()->with(['user', 'items.item'])->latest();
+		$query = Order::query()
+			->select('orders.*') // ensure unique orders across filters that may translate to joins/exists
+			->distinct()
+			->with(['user', 'items.item'])
+			->latest();
 
         // Filter by order type
         $type = $request->string('type')->toString();
@@ -51,8 +55,11 @@ class OrderController extends Controller
         // Search by order id, customer name or email
         if ($request->filled('q')) {
             $q = $request->string('q')->toString();
-            $query->where(function ($sub) use ($q) {
-                $sub->where('id', $q)
+            // Remove # symbol if present for ID search
+            $idQuery = ltrim($q, '#');
+            $query->where(function ($sub) use ($q, $idQuery) {
+                $sub->where('id', $idQuery)
+                    ->orWhere('id', 'like', "%$idQuery%")
                     ->orWhereHas('user', function ($u) use ($q) {
                         $u->where('name', 'like', "%$q%")
                           ->orWhere('email', 'like', "%$q%");
@@ -124,11 +131,31 @@ class OrderController extends Controller
     public function update($id, Request $request)
     {
         $validated = $request->validate([
-            // Restrict to DB enum: pending, processing, completed, cancelled, backorder
-            'status' => 'required|in:pending,processing,completed,cancelled,backorder',
+            'status' => 'required|in:pending,processing,ready_to_ship,shipped,delivered,completed,cancelled,backorder,in_design,in_production,ready_for_delivery',
+            'tracking_number' => 'nullable|string|max:100',
+            'carrier' => 'nullable|in:lalamove,jnt,ninjavan,2go,pickup',
+            'delivered_at' => 'nullable|date',
         ]);
+        
         $order = Order::findOrFail($id);
         $order->status = $validated['status'];
+        
+        // Save shipping fields if provided
+        if (isset($validated['tracking_number'])) {
+            $order->tracking_number = $validated['tracking_number'];
+        }
+        if (isset($validated['carrier'])) {
+            $order->carrier = $validated['carrier'];
+        }
+        if (isset($validated['delivered_at'])) {
+            $order->delivered_at = $validated['delivered_at'];
+        }
+        
+        // Auto-set delivered_at when status is marked as 'delivered'
+        if ($validated['status'] === 'delivered' && !$order->delivered_at) {
+            $order->delivered_at = now();
+        }
+        
         $order->save();
 
         if ($request->expectsJson()) {

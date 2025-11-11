@@ -52,6 +52,20 @@ class ProductController extends Controller
             'item' => $item,
         ]);
     }
+
+    /**
+     * Return current stock information for an item (used by frontend for real-time visibility).
+     */
+    public function stock(Item $item)
+    {
+        return response()->json([
+            'id' => $item->id,
+            'stock' => (int) ($item->stock ?? 0),
+            'is_backorder' => $item->isBackorder(),
+            'restock_date' => optional($item->restock_date)?->format('M d, Y'),
+            'status' => $item->isBackorder() ? 'back_order' : 'in_stock',
+        ]);
+    }
 }
 
 

@@ -171,6 +171,17 @@
                     </div>
                 </div>
             </div>
+
+            @if($customOrder->status === \App\Models\CustomOrder::STATUS_APPROVED && ($customOrder->order?->payment_status !== 'paid'))
+            <div class="mt-6 bg-white overflow-hidden border border-gray-100 rounded-xl shadow-sm p-6 md:p-8">
+                <h3 class="text-lg font-semibold mb-4">Payment</h3>
+                <p class="text-sm text-gray-700">Your custom order has been confirmed. Please complete payment to begin production.</p>
+                <div class="mt-4">
+                    <a href="{{ route('checkout.page', ['order_id' => $customOrder->order?->id]) }}" class="inline-flex items-center px-4 py-2 rounded-md text-white" style="background:#c59d5f;">Proceed to Checkout</a>
+                </div>
+            </div>
+
+            @endif
         </div>
     </section>
 
@@ -199,5 +210,6 @@
         </div>
     </footer>
 
+    <script></script>
 </body>
 </html>

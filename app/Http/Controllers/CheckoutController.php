@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Cart;
 use App\Models\CartItem;
-use App\Models\CustomCartItem;
 use App\Models\CustomOrder;
 use App\Models\Item;
 use App\Models\Order;
@@ -22,36 +21,40 @@ class CheckoutController extends Controller
         if ($user) {
             $user->loadMissing('address');
         }
-        $cart = Cart::where('status', 'active')
+		// Optional: paying an existing order (e.g., confirmed custom order)
+		$payOrder = null;
+		if (request()->filled('order_id')) {
+			$payOrder = \App\Models\Order::with(['user', 'customOrders'])->where('id', request('order_id'))->when($user, fn($q) => $q->where('user_id', $user->id))->first();
+		}
+
+		$cart = Cart::where('status', 'active')
             ->where('user_id', $user->id ?? null)
             ->orWhere(function ($q) {
                 $q->where('status', 'active')->whereNull('user_id')->where('session_id', session()->getId());
             })
             ->first();
 
-        $items = collect();
-        $customItems = collect();
+		$items = collect();
         $subtotal = 0.0;
-        if ($cart) {
+		if ($cart && !$payOrder) {
             $items = CartItem::with('item.photos')->where('cart_id', $cart->id)->get();
-            $customItems = CustomCartItem::where('session_id', $cart->session_id)->get();
             $subtotal = (float) $items->sum('subtotal');
         }
 
-        return view('checkout', [
+		return view('checkout', [
             'user' => $user,
             'cartItems' => $items,
-            'customCartItems' => $customItems,
             'subtotal' => $subtotal,
             'shipping' => 0.0,
-            'total' => $subtotal,
+			'total' => $payOrder ? (float) $payOrder->total_amount : $subtotal,
+			'payOrder' => $payOrder,
         ]);
     }
 
     public function store(Request $request)
     {
         $user = Auth::user();
-        $validated = $request->validate([
+		$validated = $request->validate([
             'first_name' => 'required|string|max:120',
             'last_name' => 'required|string|max:120',
             'address_line' => 'required|string|max:255',
@@ -59,8 +62,8 @@ class CheckoutController extends Controller
             'postal_code' => 'required|string|max:20',
             'province' => 'required|string|max:120',
             'phone_number' => 'required|string|max:30',
-            'payment_method' => 'required|in:COD,GCash,Card,Bank',
-            'order_type' => 'nullable|in:standard,backorder,custom',
+			'payment_method' => 'required|in:GCash,Bank',
+			'order_type' => 'nullable|in:standard,backorder',
         ]);
 
         $cart = Cart::where('status', 'active')
@@ -72,9 +75,8 @@ class CheckoutController extends Controller
                 }
             })->firstOrFail();
 
-        $cartItems = CartItem::with('item')->where('cart_id', $cart->id)->get();
-        $customCartItems = CustomCartItem::where('session_id', $cart->session_id)->get();
-        if ($cartItems->isEmpty() && $customCartItems->isEmpty()) {
+		$cartItems = CartItem::with('item')->where('cart_id', $cart->id)->get();
+		if ($cartItems->isEmpty()) {
             return back()->withErrors(['cart' => 'Your cart is empty.']);
         }
 
@@ -91,25 +93,19 @@ class CheckoutController extends Controller
                     // If the cart line is already marked as backorder, respect that; otherwise fall back to item's backorder flag
                     $hasBack = $hasBack || (bool) ($ci->is_backorder ?? $ci->item->isBackorder());
                 }
-                if (($validated['order_type'] ?? null) === 'custom') {
-                    $inferredType = 'custom';
-                } elseif ($hasBack) {
+				if ($hasBack) {
                     $inferredType = 'backorder';
                 }
 
-                $orderStatus = match ($inferredType) {
-                    'standard' => 'processing',
-                    'backorder' => 'backorder',
-                    'custom' => 'pending',
-                    default => 'pending',
-                };
+                // All orders start as pending until payment is confirmed
+                $orderStatus = 'pending';
 
                 $order = Order::create([
                     'user_id' => $user?->id,
                     'order_type' => $inferredType,
                     'status' => $orderStatus,
                     'total_amount' => $total,
-                    'payment_method' => $validated['payment_method'] === 'Bank' ? 'Card' : $validated['payment_method'],
+					'payment_method' => null,
                     'payment_status' => 'unpaid',
                 ]);
 
@@ -201,19 +197,6 @@ class CheckoutController extends Controller
                     }
                 }
 
-                // Save custom-order requests (no price until reviewed)
-                foreach ($customCartItems as $cci) {
-                    $order->customOrders()->create([
-                        'custom_name' => $cci->custom_name,
-                        'description' => $cci->description,
-                        'customization_details' => $cci->customization_details,
-                        'reference_image_path' => $cci->reference_image_path,
-                        'quantity' => $cci->quantity,
-                        'price_estimate' => null,
-                        'status' => \App\Models\CustomOrder::STATUS_PENDING_REVIEW,
-                    ]);
-                }
-
                 // Upsert user's address as default shipping
                 if ($user) {
                     $addr = Address::firstOrNew(['user_id' => $user->id, 'type' => 'shipping']);
@@ -227,19 +210,24 @@ class CheckoutController extends Controller
                     $addr->save();
                 }
 
-                // Clear cart (regular and custom) and mark converted
+				// Clear cart (regular) and mark converted
                 $cart->items()->delete();
-                CustomCartItem::where('session_id', $cart->session_id)->delete();
                 $cart->status = 'converted';
                 $cart->save();
 
                 return $order;
             });
-        } catch (\Throwable $e) {
+		} catch (\Throwable $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
             return back()->withErrors(['checkout' => $e->getMessage()])->withInput();
         }
 
-        return redirect()->route('customer.orders.show', $order->id)->with('success', 'Order placed successfully');
+		if ($request->expectsJson()) {
+			return response()->json(['success' => true, 'order_id' => $order->id, 'total' => (float) $order->total_amount]);
+		}
+		return redirect()->route('customer.orders.show', $order->id)->with('success', 'Order placed successfully');
     }
 }
 
