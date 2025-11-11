@@ -11,7 +11,9 @@ class OrderController extends Controller
     public function index()
     {
         $user = Auth::user();
-        $orders = Order::with('items.item')
+		$orders = Order::with('items.item.photos')
+			->select('orders.*') // ensure unique orders even if future joins/filters are added
+			->distinct()
             ->where('user_id', $user->id)
             ->latest()
             ->paginate(12)
@@ -45,7 +47,7 @@ class OrderController extends Controller
     public function show($id)
     {
         $user = Auth::user();
-        $order = Order::with(['user.address', 'items.item.photos'])
+		$order = Order::with(['user.address', 'items.item.photos', 'payments'])
             ->where('user_id', $user->id)
             ->findOrFail($id);
 

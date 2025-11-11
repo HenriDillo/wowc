@@ -75,29 +75,7 @@
             <a href="/products" class="px-4 py-2 rounded-md bg-[#c59d5f] text-white hover:opacity-90">Continue Shopping</a>
         </div>
 
-        @if(!empty($backOrders) && $backOrders->isNotEmpty())
-            <div class="mb-6 bg-white border border-blue-50 rounded-xl shadow-sm p-4">
-                <h2 class="text-lg font-medium text-gray-900">Your Back Orders</h2>
-                <p class="text-sm text-blue-700 mt-1">Items awaiting stock or fulfillment. We'll notify you when they're ready.</p>
-                <div class="mt-3 divide-y">
-                    @foreach($backOrders as $bo)
-                        <div class="py-3 flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <img src="{{ $bo->item?->photo_url }}" class="w-12 h-12 rounded object-cover bg-gray-100"/>
-                                <div>
-                                    <div class="font-medium text-gray-900">{{ $bo->item?->name }}</div>
-                                    <div class="text-xs text-gray-500">Qty: {{ $bo->quantity }} • Status: {{ $bo->backorder_status }}</div>
-                                    @if($bo->order?->expected_restock_date)
-                                        <div class="text-xs text-blue-700">Expected: {{ $bo->order->expected_restock_date->format('M d, Y') }}</div>
-                                    @endif
-                                </div>
-                            </div>
-                            <div class="text-sm text-gray-700">Order #{{ $bo->order->id }}</div>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-        @endif
+		
 
         @if(!empty($customOrders) && $customOrders->isNotEmpty())
             <div class="mb-6 bg-white border border-yellow-50 rounded-xl shadow-sm p-4">
@@ -134,39 +112,87 @@
             </div>
         @endif
 
-        <div class="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
-            <table class="min-w-full divide-y divide-gray-100">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order #</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                        <th class="px-4 py-3"></th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100 bg-white">
-                    @forelse($orders as $order)
-                        <tr>
-                            <td class="px-4 py-3 text-sm font-medium text-gray-900">#{{ $order->id }}</td>
-                            <td class="px-4 py-3 text-sm text-gray-700">{{ $order->created_at?->format('M d, Y') }}</td>
-                            <td class="px-4 py-3 text-sm capitalize">{{ $order->order_type }}</td>
-                            <td class="px-4 py-3 text-sm capitalize">{{ $order->status }}</td>
-                            <td class="px-4 py-3 text-sm font-medium">₱{{ number_format($order->total_amount, 2) }}</td>
-                            <td class="px-4 py-3 text-right">
-                                <a href="{{ route('customer.orders.show', $order->id) }}" class="inline-flex items-center px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">View</a>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="px-4 py-6 text-center text-gray-500">No orders yet.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-            <div class="px-4 py-3">{{ $orders->links() }}</div>
-        </div>
+		@php
+			$standardOrders = $orders->filter(fn($o) => ($o->order_type ?? '') === 'standard');
+			$backOrdersOrders = $orders->filter(fn($o) => ($o->order_type ?? '') === 'backorder');
+			$firstPhoto = function($order){
+				$firstItem = optional($order->items)->first();
+				return optional(optional($firstItem)->item?->photos?->first())->url;
+			};
+		@endphp
+
+		@if($standardOrders->isNotEmpty())
+			<div class="mb-6 bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+				<h2 class="text-lg font-medium text-gray-900">Your Standard Orders</h2>
+				<p class="text-sm text-gray-700 mt-1">Orders fulfilled from available stock.</p>
+				<div class="mt-3 divide-y">
+					@foreach($standardOrders as $o)
+						<div class="py-3 flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								@if($firstPhoto($o))
+									<img src="{{ $firstPhoto($o) }}" class="w-12 h-12 rounded object-cover bg-gray-100"/>
+								@else
+									<div class="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-gray-400">
+										<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+										</svg>
+									</div>
+								@endif
+								<div>
+									@php $firstName = optional(optional($o->items)->first()?->item)->name; @endphp
+									<div class="font-medium text-gray-900">{{ $firstName ?? ('Order #'.$o->id) }}</div>
+									<div class="text-xs text-gray-500">Placed: {{ $o->created_at?->format('M d, Y') }} • Status: {{ ucfirst($o->status) }}</div>
+								</div>
+							</div>
+							<div class="flex flex-col items-end gap-2">
+								<div class="text-sm text-gray-700">Order #{{ $o->id }}</div>
+								<a href="{{ route('customer.orders.show', $o->id) }}" class="text-xs text-yellow-700 hover:underline">View Details</a>
+							</div>
+						</div>
+					@endforeach
+				</div>
+			</div>
+		@endif
+
+		@if($backOrdersOrders->isNotEmpty())
+			<div class="mb-6 bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+				<h2 class="text-lg font-medium text-gray-900">Your Back-Orders</h2>
+				<p class="text-sm text-blue-700 mt-1">Orders awaiting stock; we’ll notify you when ready.</p>
+				<div class="mt-3 divide-y">
+					@foreach($backOrdersOrders as $o)
+						<div class="py-3 flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								@if($firstPhoto($o))
+									<img src="{{ $firstPhoto($o) }}" class="w-12 h-12 rounded object-cover bg-gray-100"/>
+								@else
+									<div class="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-gray-400">
+										<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+										</svg>
+									</div>
+								@endif
+								<div>
+									@php $firstName = optional(optional($o->items)->first()?->item)->name; @endphp
+									<div class="font-medium text-gray-900">{{ $firstName ?? ('Order #'.$o->id) }}</div>
+									<div class="text-xs text-gray-500">Placed: {{ $o->created_at?->format('M d, Y') }} • Status: {{ ucfirst($o->status) }}</div>
+									@if($o->expected_restock_date)
+										<div class="text-xs text-blue-700">Expected: {{ $o->expected_restock_date->format('M d, Y') }}</div>
+									@endif
+								</div>
+							</div>
+							<div class="flex flex-col items-end gap-2">
+								<div class="text-sm text-gray-700">Order #{{ $o->id }}</div>
+								<a href="{{ route('customer.orders.show', $o->id) }}" class="text-xs text-yellow-700 hover:underline">View Details</a>
+							</div>
+						</div>
+					@endforeach
+				</div>
+			</div>
+		@endif
+
+		@if($standardOrders->isEmpty() && $backOrdersOrders->isEmpty() && (empty($customOrders) || $customOrders->isEmpty()))
+			<div class="px-4 py-6 bg-white border border-gray-100 rounded-xl shadow-sm text-center text-gray-500">No orders yet.</div>
+		@endif
     </section>
 
     <!-- Footer -->

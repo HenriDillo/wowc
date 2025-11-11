@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Cart;
 use App\Models\CartItem;
-use App\Models\CustomCartItem;
 use App\Models\Item;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,59 +30,6 @@ class CartController extends Controller
 			]);
 		}
 		return $cart;
-	}
-
-	public function addCustomToCart(Request $request)
-	{
-		$validated = $request->validate([
-			'custom_name' => 'required|string|max:255',
-			'description' => 'required|string',
-			'customization_details' => 'required|array',
-			'customization_details.dimensions' => 'required|string',
-			'reference_image' => 'required|image|mimes:jpeg,png,jpg|max:5120',
-			'quantity' => 'required|integer|min:1',
-		]);
-
-		$cart = $this->getActiveCart();
-
-		if ($request->hasFile('reference_image')) {
-			$path = $request->file('reference_image')->store('custom-orders', 'public');
-			$validated['reference_image_path'] = $path;
-		}
-
-		$customCartItem = CustomCartItem::create([
-			'session_id' => $cart->session_id,
-			'custom_name' => $validated['custom_name'],
-			'description' => $validated['description'],
-			'customization_details' => $validated['customization_details'],
-			'reference_image_path' => $validated['reference_image_path'] ?? null,
-			'quantity' => $validated['quantity'],
-		]);
-
-		if ($request->expectsJson() || $request->wantsJson() || $request->ajax()) {
-			$payload = $this->jsonCart()->getData(true);
-			$payload['message'] = 'Custom order added to cart.';
-			return response()->json($payload);
-		}
-
-		return redirect()->route('cart')->with('success', 'Custom order added to cart.');
-	}
-
-	public function removeCustomFromCart($id)
-	{
-		$cart = $this->getActiveCart();
-		$customItem = CustomCartItem::where('id', $id)
-			->where('session_id', $cart->session_id)
-			->first();
-
-		if ($customItem) {
-			if ($customItem->reference_image_path) {
-				Storage::disk('public')->delete($customItem->reference_image_path);
-			}
-			$customItem->delete();
-		}
-
-		return $this->jsonCart();
 	}
 
 	public function addToCart(Request $request)
@@ -177,7 +123,7 @@ class CartController extends Controller
 			}
 
 			if ($addBack > 0) {
-				$message = 'Some items exceed current stock and the excess was added as Back Order.';
+				$message = 'Some items are currently out of stock and will be placed on back order.';
 			} else {
 				$message = 'Item added to cart.';
 			}
@@ -261,30 +207,11 @@ class CartController extends Controller
 			]);
 		}
 
-		$message = 'Quantity exceeds current stock; excess added as Back Order.';
+		$message = 'Quantity exceeds current stock; some items will be placed on back order.';
 
 		$payload = $this->jsonCart()->getData(true);
 		$payload['message'] = $message;
 		return response()->json($payload);
-	}
-
-
-	public function updateCustomQuantity($customCartItemId, Request $request)
-	{
-		$validated = $request->validate([
-			'quantity' => 'required|integer|min:1',
-		]);
-
-		$cart = $this->getActiveCart();
-		$ci = CustomCartItem::where('id', $customCartItemId)->where('session_id', $cart->session_id)->first();
-		if (!$ci) {
-			return response()->json(['error' => 'Custom cart item not found'], 404);
-		}
-
-		$ci->quantity = (int) $validated['quantity'];
-		$ci->save();
-
-		return $this->jsonCart();
 	}
 
 	public function showCart()
@@ -296,8 +223,7 @@ class CartController extends Controller
 	{
 		$cart = $this->getActiveCart();
 		$items = CartItem::with('item.photos')->where('cart_id', $cart->id)->get();
-		$customItems = CustomCartItem::where('session_id', $cart->session_id)->get();
-		Log::info('CartController@jsonCart', ['cart_id' => $cart->id, 'items' => $items->count(), 'custom_items' => $customItems->count(), 'session' => Session::getId(), 'user' => Auth::id()]);
+		Log::info('CartController@jsonCart', ['cart_id' => $cart->id, 'items' => $items->count(), 'session' => Session::getId(), 'user' => Auth::id()]);
 
 		$subtotal = (float) $items->sum('subtotal');
 
@@ -317,19 +243,7 @@ class CartController extends Controller
 			];
 		});
 
-		$customCartItems = $customItems->map(function (CustomCartItem $ci) {
-			return [
-				'type' => 'custom',
-				'cart_item_id' => $ci->id,
-				'custom_name' => $ci->custom_name,
-				'description' => $ci->description,
-				'quantity' => (int) $ci->quantity,
-				'customization_details' => $ci->customization_details,
-				'photo' => $ci->reference_image_path ? Storage::url($ci->reference_image_path) : null,
-			];
-		});
-
-		$allItems = $regularItems->concat($customCartItems);
+		$allItems = $regularItems;
 
 		return response()->json([
 			'items' => $allItems->values(),
