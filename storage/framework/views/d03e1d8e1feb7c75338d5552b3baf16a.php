@@ -32,7 +32,53 @@
             </div>
         </div>
 
-        <!-- Payment Alert (if not paid) -->
+        <!-- Parent-Sub Order Info (if applicable) -->
+        <?php if($order->order_type === 'mixed' && $order->childOrders->isNotEmpty()): ?>
+            <!-- This is a parent (mixed) order -->
+            <div class="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <h3 class="font-semibold text-purple-900">Mixed Order Structure</h3>
+                <p class="text-sm text-purple-700 mt-1">This order contains both standard and back order items split into sub-orders below.</p>
+                <div class="mt-3 space-y-2">
+                    <?php $totalAmount = $order->total_amount; ?>
+                    <?php $__currentLoopData = $order->childOrders; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $child): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                        <div class="flex items-center justify-between bg-white px-3 py-2 rounded border border-purple-100">
+                            <div class="text-sm">
+                                <span class="font-medium text-gray-900">Sub-Order #<?php echo e($child->id); ?></span>
+                                <span class="text-gray-600 ml-2">• <?php echo e(ucfirst($child->order_type)); ?> Items</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium 
+                                    <?php if($child->order_type === 'standard'): ?> bg-green-100 text-green-800
+                                    <?php else: ?> bg-blue-100 text-blue-800
+                                    <?php endif; ?>">
+                                    <?php echo e(ucfirst($child->status)); ?>
+
+                                </span>
+                                <span class="text-sm font-medium text-gray-700">₱<?php echo e(number_format($child->total_amount, 2)); ?></span>
+                                <a href="<?php echo e(route('employee.orders.show', $child->id)); ?>" class="text-xs text-purple-700 hover:underline">View</a>
+                            </div>
+                        </div>
+                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                </div>
+                <div class="mt-3 pt-3 border-t border-purple-200 flex items-center justify-between">
+                    <span class="font-medium text-purple-900">Total Parent Order Amount</span>
+                    <span class="text-lg font-semibold text-purple-900">₱<?php echo e(number_format($totalAmount, 2)); ?></span>
+                </div>
+            </div>
+        <?php elseif($order->parent_order_id): ?>
+            <!-- This is a child order (sub-order) -->
+            <?php $parentOrder = $order->parentOrder; ?>
+            <div class="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <h3 class="font-semibold text-purple-900">Part of Mixed Order</h3>
+                <p class="text-sm text-purple-700 mt-1">This is a <?php echo e(ucfirst($order->order_type)); ?> sub-order linked to Parent Order #<?php echo e($parentOrder->id); ?>.</p>
+                <div class="mt-3">
+                    <a href="<?php echo e(route('employee.orders.show', $parentOrder->id)); ?>" class="inline-flex items-center px-3 py-2 rounded-lg border border-purple-300 text-purple-700 hover:bg-purple-100 text-sm font-medium">
+                        ← View Parent Order #<?php echo e($parentOrder->id); ?>
+
+                    </a>
+                </div>
+            </div>
+        <?php endif; ?>
         <?php if(!$canProcess): ?>
             <div class="mb-6 rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
                 <div class="flex items-start gap-3">
@@ -418,19 +464,39 @@ unset($__errorArgs, $__bag); ?>
                             <span class="text-gray-600">Status:</span>
                             <span class="font-medium inline-flex px-2 py-0.5 rounded-full text-xs
                                 <?php if($paymentStatus === 'paid'): ?> bg-green-100 text-green-800
+                                <?php elseif($paymentStatus === 'partially_paid'): ?> bg-blue-100 text-blue-800
                                 <?php elseif($paymentStatus === 'pending_verification'): ?> bg-yellow-100 text-yellow-800
                                 <?php else: ?> bg-red-100 text-red-800
                                 <?php endif; ?>">
-                                <?php if($paymentStatus === 'paid'): ?> ✓ Paid
+                                <?php if($paymentStatus === 'paid'): ?> ✓ Fully Paid
+                                <?php elseif($paymentStatus === 'partially_paid'): ?> 💰 Partially Paid
                                 <?php elseif($paymentStatus === 'pending_verification'): ?> ⏳ Pending Verification
                                 <?php else: ?> ✗ Unpaid
                                 <?php endif; ?>
                             </span>
                         </div>
-                        <div class="border-t border-gray-200 pt-2 flex justify-between font-semibold">
-                            <span>Total:</span>
-                            <span>₱<?php echo e(number_format($order->total_amount, 2)); ?></span>
-                        </div>
+                        
+                        <?php if($paymentStatus === 'partially_paid'): ?>
+                            <div class="border-t border-gray-200 pt-2 space-y-2">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Total Order Amount:</span>
+                                    <span class="font-medium">₱<?php echo e(number_format($order->total_amount, 2)); ?></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Amount Paid (50%):</span>
+                                    <span class="font-medium text-green-700">₱<?php echo e(number_format($order->required_payment_amount ?? ($order->total_amount * 0.5), 2)); ?></span>
+                                </div>
+                                <div class="flex justify-between font-semibold bg-blue-50 p-2 rounded border border-blue-200">
+                                    <span class="text-blue-900">Remaining Balance (50%):</span>
+                                    <span class="text-blue-900">₱<?php echo e(number_format($order->remaining_balance ?? ($order->total_amount * 0.5), 2)); ?></span>
+                                </div>
+                            </div>
+                        <?php else: ?>
+                            <div class="border-t border-gray-200 pt-2 flex justify-between font-semibold">
+                                <span>Total:</span>
+                                <span>₱<?php echo e(number_format($order->total_amount, 2)); ?></span>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 

@@ -125,16 +125,25 @@
             </div>
             <div>
                 @forelse($orders as $o)
-                    <div class="grid grid-cols-12 items-center px-4 py-4 border-b text-sm hover:bg-gray-50/50">
+                    <!-- Order Row -->
+                    <div class="grid grid-cols-12 items-center px-4 py-4 border-b text-sm hover:bg-gray-50/50 {{ $o->order_type === 'mixed' ? 'bg-purple-50' : '' }}">
                         <div class="col-span-12 md:col-span-2">
-                            #{{ $o->id }}
+                            {{ $o->order_type === 'mixed' ? '📦' : '' }} #{{ $o->id }}
+                            @if($o->order_type === 'mixed' && $o->childOrders->isNotEmpty())
+                                <div class="text-xs text-purple-700 mt-1">{{ $o->childOrders->count() }} sub-orders</div>
+                            @endif
                         </div>
                         <div class="col-span-12 md:col-span-2 mt-2 md:mt-0">
                             <div class="font-medium text-gray-900 truncate">{{ $o->user->name ?? 'Guest' }}</div>
                             <div class="text-xs text-gray-500 truncate">{{ $o->user->email ?? '' }}</div>
                         </div>
                         <div class="col-span-6 md:col-span-1 mt-2 md:mt-0">
-                            <span class="inline-flex px-2 py-0.5 rounded text-xs border @if($o->order_type === 'standard') border-green-300 bg-green-50 text-green-700 @elseif($o->order_type === 'backorder') border-blue-300 bg-blue-50 text-blue-700 @else border-gray-300 bg-white @endif">
+                            <span class="inline-flex px-2 py-0.5 rounded text-xs border 
+                                @if($o->order_type === 'standard') border-green-300 bg-green-50 text-green-700
+                                @elseif($o->order_type === 'backorder') border-blue-300 bg-blue-50 text-blue-700
+                                @elseif($o->order_type === 'mixed') border-purple-300 bg-purple-50 text-purple-700
+                                @else border-gray-300 bg-white 
+                                @endif">
                                 @if($o->order_type === 'standard')
                                     Standard
                                 @elseif($o->order_type === 'backorder')
@@ -161,16 +170,21 @@
                                 $paymentStatus = $o->payment_status ?? 'unpaid';
                                 $paymentColor = [
                                     'paid' => 'bg-green-100 text-green-800',
+                                    'partially_paid' => 'bg-blue-100 text-blue-800',
                                     'unpaid' => 'bg-red-100 text-red-800',
                                     'pending_verification' => 'bg-yellow-100 text-yellow-800',
                                 ][$paymentStatus] ?? 'bg-gray-100 text-gray-700';
                                 $paymentLabel = [
-                                    'paid' => 'Paid ✓',
+                                    'paid' => 'Fully Paid ✓',
+                                    'partially_paid' => 'Partially Paid',
                                     'unpaid' => 'Unpaid',
-                                    'pending_verification' => 'Pending',
+                                    'pending_verification' => 'Pending Verification',
                                 ][$paymentStatus] ?? ucfirst($paymentStatus);
                             @endphp
                             <span class="inline-flex px-2 py-0.5 rounded text-xs {{ $paymentColor }}">{{ $paymentLabel }}</span>
+                            @if($paymentStatus === 'partially_paid' && ($o->remaining_balance ?? 0) > 0)
+                                <div class="text-xs text-blue-700 mt-1 font-semibold">Remaining: ₱{{ number_format($o->remaining_balance, 2) }}</div>
+                            @endif
                         </div>
                         <div class="col-span-6 md:col-span-2 mt-2 md:mt-0 text-gray-600">{{ $o->created_at->format('M d, Y') }}</div>
                         <div class="col-span-6 md:col-span-1 mt-2 md:mt-0 font-medium">₱{{ number_format($o->total_amount ?? 0, 2) }}</div>
@@ -178,6 +192,52 @@
                             <a href="{{ route('employee.orders.show', $o->id) }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-medium">View</a>
                         </div>
                     </div>
+                    
+                    <!-- Sub-Orders Row (if mixed order) -->
+                    @if($o->order_type === 'mixed' && $o->childOrders->isNotEmpty())
+                        @foreach($o->childOrders as $childOrder)
+                            <div class="grid grid-cols-12 items-center px-4 py-3 border-b bg-purple-25 text-sm">
+                                <div class="col-span-12 md:col-span-2 pl-8 text-gray-600">
+                                    └─ Sub-Order #{{ $childOrder->id }}
+                                </div>
+                                <div class="col-span-12 md:col-span-2 mt-2 md:mt-0">
+                                    <div class="text-xs text-gray-600">{{ ucfirst($childOrder->order_type) }} Items</div>
+                                </div>
+                                <div class="col-span-6 md:col-span-1 mt-2 md:mt-0">
+                                    <span class="inline-flex px-2 py-0.5 rounded text-xs border 
+                                        @if($childOrder->order_type === 'standard') border-green-300 bg-green-50 text-green-700
+                                        @else border-blue-300 bg-blue-50 text-blue-700
+                                        @endif">
+                                        {{ ucfirst($childOrder->order_type) }}
+                                    </span>
+                                </div>
+                                <div class="col-span-6 md:col-span-1 mt-2 md:mt-0">
+                                    @php
+                                        $childStatusColor = $statusColor ?? 'bg-gray-100 text-gray-700';
+                                    @endphp
+                                    <span class="inline-flex px-2 py-0.5 rounded text-xs capitalize {{ $childStatusColor }}">{{ $childOrder->status }}</span>
+                                </div>
+                                <div class="col-span-6 md:col-span-1 mt-2 md:mt-0">
+                                    <span class="inline-flex px-2 py-0.5 rounded text-xs 
+                                        @php
+                                            $childPaymentStatus = $childOrder->payment_status ?? 'unpaid';
+                                            echo match($childPaymentStatus) {
+                                                'paid' => 'bg-green-100 text-green-800',
+                                                'partially_paid' => 'bg-blue-100 text-blue-800',
+                                                default => 'bg-red-100 text-red-800'
+                                            };
+                                        @endphp">
+                                        {{ ucfirst($childPaymentStatus) }}
+                                    </span>
+                                </div>
+                                <div class="col-span-6 md:col-span-2 mt-2 md:mt-0"></div>
+                                <div class="col-span-6 md:col-span-1 mt-2 md:mt-0 font-medium text-purple-700">₱{{ number_format($childOrder->total_amount ?? 0, 2) }}</div>
+                                <div class="col-span-6 md:col-span-1 mt-2 md:mt-0 text-right">
+                                    <a href="{{ route('employee.orders.show', $childOrder->id) }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-purple-300 text-purple-700 hover:bg-purple-50 text-xs font-medium">View</a>
+                                </div>
+                            </div>
+                        @endforeach
+                    @endif
                 @empty
                     <div class="px-4 py-10 text-center text-gray-600">No orders found.</div>
                 @endforelse

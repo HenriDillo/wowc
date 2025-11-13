@@ -10,11 +10,11 @@ use Illuminate\Support\Facades\Auth;
 class OrderController extends Controller
 {
     public function index(Request $request)
-    {
+	{
 		$query = Order::query()
 			->select('orders.*') // ensure unique orders across filters that may translate to joins/exists
 			->distinct()
-			->with(['user', 'items.item'])
+			->with(['user', 'items.item', 'childOrders'])
 			->latest();
 
         // Filter by order type
@@ -68,20 +68,23 @@ class OrderController extends Controller
             });
         }
 
+        // Exclude child orders from main list (they'll be shown under parent)
+        $query->whereNull('parent_order_id');
+
         $orders = $query->paginate(15)->withQueryString();
 
         return view('employee.orders', [
             'orders' => $orders,
             'activeType' => $type,
         ]);
-    }
-
-    public function show($id)
+    }    public function show($id)
     {
         $order = Order::with([
             'user.address',
             'items.item.photos',
             'customOrders',
+            'childOrders',
+            'parentOrder',
         ])->findOrFail($id);
         // If the request expects JSON (modal usage), return JSON; otherwise render a full details page
         if (request()->expectsJson()) {
