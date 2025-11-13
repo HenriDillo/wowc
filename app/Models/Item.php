@@ -43,6 +43,14 @@ class Item extends Model
         return $this->hasMany(OrderItem::class);
     }
 
+    /**
+     * Stock transactions for this item
+     */
+    public function transactions()
+    {
+        return $this->hasMany(ItemStockTransaction::class);
+    }
+
     public function getPhotoUrlAttribute(): ?string
     {
         $primary = $this->relationLoaded('photos') ? $this->photos->first() : $this->photos()->first();

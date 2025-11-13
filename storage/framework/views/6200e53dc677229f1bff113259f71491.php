@@ -1,18 +1,17 @@
-@extends('layouts.employee')
+<?php $__env->startSection('page_title', 'Raw Materials Management'); ?>
 
-@section('page_title', 'Raw Materials Management')
-
-@section('content')
+<?php $__env->startSection('content'); ?>
 <div x-data="{ openAdd: false, editId: null, hideId: null, addStockId: null, reduceStockId: null, bulkAddOpen: false, bulkReduceOpen: false, search: '', searchLower: '', bulkItems: [] }" x-effect="searchLower = (search || '').toLowerCase()" class="space-y-6">
 
-    {{-- Success Feedback --}}
-    @if (session('status'))
+    
+    <?php if(session('status')): ?>
         <div class="bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-2 rounded">
-            {{ session('status') }}
-        </div>
-    @endif
+            <?php echo e(session('status')); ?>
 
-    {{-- Card: Visible Materials --}}
+        </div>
+    <?php endif; ?>
+
+    
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-b">
             <div class="flex items-center gap-3">
@@ -44,23 +43,23 @@
             </div>
         </div>
 
-    {{-- Add Material Modal --}}
+    
     <div x-show="openAdd" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
         <div @click.outside="openAdd = false" class="bg-white p-6 rounded-lg w-96 shadow-xl">
             <h2 class="text-xl font-semibold mb-4">Add Material</h2>
-            <form action="{{ route('employee.materials.store') }}" method="POST" class="space-y-3">
-                @csrf
+            <form action="<?php echo e(route('employee.materials.store')); ?>" method="POST" class="space-y-3">
+                <?php echo csrf_field(); ?>
                 <div>
                     <input type="text" name="name" placeholder="Material Name" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-                    @if($errors->getBag('createMaterial')->has('name'))
-                        <p class="text-red-500 text-sm mt-1">{{ $errors->getBag('createMaterial')->first('name') }}</p>
-                    @endif
+                    <?php if($errors->getBag('createMaterial')->has('name')): ?>
+                        <p class="text-red-500 text-sm mt-1"><?php echo e($errors->getBag('createMaterial')->first('name')); ?></p>
+                    <?php endif; ?>
                 </div>
                 <div>
                     <input type="text" name="unit" placeholder="Unit (pcs, kg, etc.)" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-                    @if($errors->getBag('createMaterial')->has('unit'))
-                        <p class="text-red-500 text-sm mt-1">{{ $errors->getBag('createMaterial')->first('unit') }}</p>
-                    @endif
+                    <?php if($errors->getBag('createMaterial')->has('unit')): ?>
+                        <p class="text-red-500 text-sm mt-1"><?php echo e($errors->getBag('createMaterial')->first('unit')); ?></p>
+                    <?php endif; ?>
                 </div>
                 <div class="flex justify-end space-x-2 mt-4">
                     <button type="button" @click="openAdd = false" class="px-4 py-2 border rounded-lg shadow-sm hover:bg-gray-50">Cancel</button>
@@ -70,30 +69,30 @@
         </div>
     </div>
 
-    {{-- Bulk Add Stock Modal --}}
+    
     <div x-show="bulkAddOpen" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
         <div id="bulkAddModal" @click.outside="bulkAddOpen = false" class="bg-white p-6 rounded-lg max-w-2xl w-full max-h-96 shadow-xl overflow-y-auto">
             <h2 class="text-xl font-semibold mb-4">Bulk Add Stock</h2>
 
-            {{-- We'll keep the form for progressive enhancement but submit via fetch to ensure a proper POST from the modal --}}
-            <form id="bulkAddForm" action="{{ route('employee.materials.bulk-add-stock') }}" method="POST" class="space-y-4" onsubmit="return false;">
-                @csrf
-                {{-- explicit token for JS to read (redundant with @csrf but convenient) --}}
-                <input type="hidden" id="bulk_add_csrf" value="{{ csrf_token() }}">
+            
+            <form id="bulkAddForm" action="<?php echo e(route('employee.materials.bulk-add-stock')); ?>" method="POST" class="space-y-4" onsubmit="return false;">
+                <?php echo csrf_field(); ?>
+                
+                <input type="hidden" id="bulk_add_csrf" value="<?php echo e(csrf_token()); ?>">
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Select Materials & Quantities</label>
                     <div class="space-y-2 max-h-48 overflow-y-auto border rounded p-3 bg-gray-50">
-                        @foreach($materials as $m)
+                        <?php $__currentLoopData = $materials; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $m): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                             <div class="flex items-center gap-3 p-2 bg-white rounded border bulk-row">
-                                <input type="checkbox" data-index="{{ $loop->index }}" class="bulk-checkbox rounded cursor-pointer" value="{{ $m->id }}" />
-                                <label class="flex-1 cursor-pointer">{{ $m->name }} ({{ $m->unit }})</label>
-                                <input type="number" data-index="{{ $loop->index }}" class="bulk-qty w-20 border rounded px-2 py-1 text-sm" placeholder="Qty" min="1" />
-                                {{-- Hidden inputs kept for accessibility/fallback --}}
-                                <input type="hidden" name="items[{{ $loop->index }}][material_id]" value="{{ $m->id }}">
-                                <input type="hidden" name="items[{{ $loop->index }}][quantity]" value="" class="hidden-qty-{{ $loop->index }}">
+                                <input type="checkbox" data-index="<?php echo e($loop->index); ?>" class="bulk-checkbox rounded cursor-pointer" value="<?php echo e($m->id); ?>" />
+                                <label class="flex-1 cursor-pointer"><?php echo e($m->name); ?> (<?php echo e($m->unit); ?>)</label>
+                                <input type="number" data-index="<?php echo e($loop->index); ?>" class="bulk-qty w-20 border rounded px-2 py-1 text-sm" placeholder="Qty" min="1" />
+                                
+                                <input type="hidden" name="items[<?php echo e($loop->index); ?>][material_id]" value="<?php echo e($m->id); ?>">
+                                <input type="hidden" name="items[<?php echo e($loop->index); ?>][quantity]" value="" class="hidden-qty-<?php echo e($loop->index); ?>">
                             </div>
-                        @endforeach
+                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                     </div>
                 </div>
                 <div>
@@ -125,7 +124,7 @@
                         }
 
                         const payload = { items: items, remarks: document.getElementById('bulkAddRemarks').value };
-                        const url = '{{ route('employee.materials.bulk-add-stock') }}';
+                        const url = '<?php echo e(route('employee.materials.bulk-add-stock')); ?>';
 
                         try {
                             const res = await fetch(url, {
@@ -167,22 +166,22 @@
         </div>
     </div>
 
-    {{-- Bulk Reduce Stock Modal --}}
+    
     <div x-show="bulkReduceOpen" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
         <div @click.outside="bulkReduceOpen = false" class="bg-white p-6 rounded-lg max-w-2xl w-full max-h-96 shadow-xl overflow-y-auto">
             <h2 class="text-xl font-semibold mb-4">Bulk Reduce Stock</h2>
-            <form action="{{ route('employee.materials.bulk-reduce-stock') }}" method="POST" class="space-y-4">
-                @csrf
+            <form action="<?php echo e(route('employee.materials.bulk-reduce-stock')); ?>" method="POST" class="space-y-4">
+                <?php echo csrf_field(); ?>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Select Materials & Quantities</label>
                     <div class="space-y-2 max-h-48 overflow-y-auto border rounded p-3 bg-gray-50">
-                        @foreach($materials as $m)
+                        <?php $__currentLoopData = $materials; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $m): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                             <div class="flex items-center gap-3 p-2 bg-white rounded border">
-                                <input type="checkbox" name="items[{{ $loop->index }}][material_id]" value="{{ $m->id }}" class="rounded cursor-pointer">
-                                <label class="flex-1 cursor-pointer">{{ $m->name }} (Stock: {{ $m->stock ?? 0 }} {{ $m->unit }})</label>
-                                <input type="number" name="items[{{ $loop->index }}][quantity]" placeholder="Qty" min="1" class="w-20 border rounded px-2 py-1 text-sm" />
+                                <input type="checkbox" name="items[<?php echo e($loop->index); ?>][material_id]" value="<?php echo e($m->id); ?>" class="rounded cursor-pointer">
+                                <label class="flex-1 cursor-pointer"><?php echo e($m->name); ?> (Stock: <?php echo e($m->stock ?? 0); ?> <?php echo e($m->unit); ?>)</label>
+                                <input type="number" name="items[<?php echo e($loop->index); ?>][quantity]" placeholder="Qty" min="1" class="w-20 border rounded px-2 py-1 text-sm" />
                             </div>
-                        @endforeach
+                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                     </div>
                 </div>
                 <div>
@@ -197,7 +196,7 @@
         </div>
     </div>
 
-        {{-- Main Materials Table --}}
+        
         <div class="overflow-x-auto">
         <table class="w-full border-collapse">
             <thead class="bg-gray-50">
@@ -211,52 +210,52 @@
                 </tr>
             </thead>
             <tbody class="bg-white">
-                @foreach($materials as $m)
-                <tr class="hover:bg-gray-50" x-show="searchLower === '' || '{{ strtolower($m->name) }}'.includes(searchLower) || '{{ strtolower($m->unit) }}'.includes(searchLower)">
-                    <td class="px-4 py-3 border-b text-sm text-gray-900">{{ $m->name }}</td>
-                    <td class="px-4 py-3 border-b text-sm text-gray-700">{{ $m->unit }}</td>
-                    <td class="px-4 py-3 border-b text-sm text-gray-700 font-medium">{{ $m->stock ?? 0 }}</td>
+                <?php $__currentLoopData = $materials; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $m): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                <tr class="hover:bg-gray-50" x-show="searchLower === '' || '<?php echo e(strtolower($m->name)); ?>'.includes(searchLower) || '<?php echo e(strtolower($m->unit)); ?>'.includes(searchLower)">
+                    <td class="px-4 py-3 border-b text-sm text-gray-900"><?php echo e($m->name); ?></td>
+                    <td class="px-4 py-3 border-b text-sm text-gray-700"><?php echo e($m->unit); ?></td>
+                    <td class="px-4 py-3 border-b text-sm text-gray-700 font-medium"><?php echo e($m->stock ?? 0); ?></td>
                     <td class="px-4 py-3 border-b text-sm">
-                        @php $status = ($m->stock ?? 0) <= 0 ? 'Out of Stock' : (($m->stock ?? 0) < 5 ? 'Low' : 'OK'); @endphp
-                        <span class="px-2 py-1 text-xs rounded {{ $status==='OK' ? 'bg-green-100 text-green-700' : ($status==='Low' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">{{ $status }}</span>
+                        <?php $status = ($m->stock ?? 0) <= 0 ? 'Out of Stock' : (($m->stock ?? 0) < 5 ? 'Low' : 'OK'); ?>
+                        <span class="px-2 py-1 text-xs rounded <?php echo e($status==='OK' ? 'bg-green-100 text-green-700' : ($status==='Low' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700')); ?>"><?php echo e($status); ?></span>
                     </td>
                     <td class="px-4 py-3 border-b text-sm">
-                        @if(!$m->is_hidden)
+                        <?php if(!$m->is_hidden): ?>
                             <span class="px-2 py-1 bg-green-500 text-white rounded">Shown</span>
-                        @else
+                        <?php else: ?>
                             <span class="px-2 py-1 bg-gray-500 text-white rounded">Hidden</span>
-                        @endif
+                        <?php endif; ?>
                     </td>
                     <td class="px-4 py-3 border-b text-sm">
                         <div class="flex items-center gap-2">
-                            <button @click="editId = {{ $m->id }}" class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
-                            <button @click="addStockId = {{ $m->id }}" class="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700">Add</button>
-                            <button @click="reduceStockId = {{ $m->id }}" class="px-3 py-1.5 text-xs bg-orange-600 text-white rounded hover:bg-orange-700">Reduce</button>
-                            <button @click="hideId = {{ $m->id }}" class="px-3 py-1.5 text-xs bg-red-600 text-white rounded hover:bg-red-700">Hide</button>
+                            <button @click="editId = <?php echo e($m->id); ?>" class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">Edit</button>
+                            <button @click="addStockId = <?php echo e($m->id); ?>" class="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700">Add</button>
+                            <button @click="reduceStockId = <?php echo e($m->id); ?>" class="px-3 py-1.5 text-xs bg-orange-600 text-white rounded hover:bg-orange-700">Reduce</button>
+                            <button @click="hideId = <?php echo e($m->id); ?>" class="px-3 py-1.5 text-xs bg-red-600 text-white rounded hover:bg-red-700">Hide</button>
                         </div>
                     </td>
                 </tr>
 
-                {{-- Edit Modal --}}
-                <div x-show="editId === {{ $m->id }}" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+                
+                <div x-show="editId === <?php echo e($m->id); ?>" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
                     <div @click.outside="editId = null" class="bg-white p-6 rounded-lg w-96 shadow-xl">
                         <h2 class="text-xl font-semibold mb-4">Edit Material</h2>
-                        <form action="{{ route('employee.materials.update', $m) }}" method="POST" class="space-y-3">
-                            @csrf
-                            @method('PUT')
+                        <form action="<?php echo e(route('employee.materials.update', $m)); ?>" method="POST" class="space-y-3">
+                            <?php echo csrf_field(); ?>
+                            <?php echo method_field('PUT'); ?>
                             <div>
-                                <input type="text" name="name" value="{{ $m->name }}" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-                                @php($bag = 'edit_' . $m->id)
-                                @if($errors->getBag($bag)->has('name'))
-                                    <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('name') }}</p>
-                                @endif
+                                <input type="text" name="name" value="<?php echo e($m->name); ?>" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                                <?php ($bag = 'edit_' . $m->id); ?>
+                                <?php if($errors->getBag($bag)->has('name')): ?>
+                                    <p class="text-red-500 text-sm mt-1"><?php echo e($errors->getBag($bag)->first('name')); ?></p>
+                                <?php endif; ?>
                             </div>
                             <div>
-                                <input type="text" name="unit" value="{{ $m->unit }}" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-                                @php($bag = 'edit_' . $m->id)
-                                @if($errors->getBag($bag)->has('unit'))
-                                    <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('unit') }}</p>
-                                @endif
+                                <input type="text" name="unit" value="<?php echo e($m->unit); ?>" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                                <?php ($bag = 'edit_' . $m->id); ?>
+                                <?php if($errors->getBag($bag)->has('unit')): ?>
+                                    <p class="text-red-500 text-sm mt-1"><?php echo e($errors->getBag($bag)->first('unit')); ?></p>
+                                <?php endif; ?>
                             </div>
                             <div class="flex justify-end space-x-2 mt-4">
                             <button type="button" @click="editId = null" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
@@ -266,12 +265,12 @@
                     </div>
                 </div>
 
-                {{-- Add Stock Modal --}}
-                <div x-show="addStockId === {{ $m->id }}" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+                
+                <div x-show="addStockId === <?php echo e($m->id); ?>" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
                     <div @click.outside="addStockId = null" class="bg-white p-6 rounded-lg w-96 shadow-xl">
-                        <h2 class="text-xl font-semibold mb-4">Add Stock - {{ $m->name }}</h2>
-                        <form action="{{ route('employee.materials.add-stock', $m) }}" method="POST" class="space-y-3">
-                            @csrf
+                        <h2 class="text-xl font-semibold mb-4">Add Stock - <?php echo e($m->name); ?></h2>
+                        <form action="<?php echo e(route('employee.materials.add-stock', $m)); ?>" method="POST" class="space-y-3">
+                            <?php echo csrf_field(); ?>
                             <div>
                                 <label class="block text-sm text-gray-700 mb-1">Quantity</label>
                                 <input name="quantity" type="number" min="1" required class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -288,12 +287,12 @@
                     </div>
                 </div>
 
-                {{-- Reduce Stock Modal --}}
-                <div x-show="reduceStockId === {{ $m->id }}" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+                
+                <div x-show="reduceStockId === <?php echo e($m->id); ?>" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
                     <div @click.outside="reduceStockId = null" class="bg-white p-6 rounded-lg w-96 shadow-xl">
-                        <h2 class="text-xl font-semibold mb-4">Reduce Stock - {{ $m->name }}</h2>
-                        <form action="{{ route('employee.materials.reduce-stock', $m) }}" method="POST" class="space-y-3">
-                            @csrf
+                        <h2 class="text-xl font-semibold mb-4">Reduce Stock - <?php echo e($m->name); ?></h2>
+                        <form action="<?php echo e(route('employee.materials.reduce-stock', $m)); ?>" method="POST" class="space-y-3">
+                            <?php echo csrf_field(); ?>
                             <div>
                                 <label class="block text-sm text-gray-700 mb-1">Quantity</label>
                                 <input name="quantity" type="number" min="1" required class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -310,42 +309,43 @@
                     </div>
                 </div>
 
-                {{-- Hide Confirm Modal --}}
-                <div x-show="hideId === {{ $m->id }}" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+                
+                <div x-show="hideId === <?php echo e($m->id); ?>" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
                     <div @click.outside="hideId = null" class="bg-white p-6 rounded-lg w-96 shadow-xl">
                         <h2 class="text-xl font-semibold mb-4">Confirm Hide</h2>
-                        <p class="text-sm text-gray-700">Are you sure you want to hide "{{ $m->name }}"?</p>
-                        @php($bag = 'hide_' . $m->id)
-                        @if($errors->getBag($bag)->has('hide'))
-                            <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('hide') }}</p>
-                        @endif
-                        <form action="{{ route('employee.materials.hide', $m) }}" method="POST" class="mt-4 flex justify-end space-x-2">
-                            @csrf
-                            @method('PATCH')
+                        <p class="text-sm text-gray-700">Are you sure you want to hide "<?php echo e($m->name); ?>"?</p>
+                        <?php ($bag = 'hide_' . $m->id); ?>
+                        <?php if($errors->getBag($bag)->has('hide')): ?>
+                            <p class="text-red-500 text-sm mt-1"><?php echo e($errors->getBag($bag)->first('hide')); ?></p>
+                        <?php endif; ?>
+                        <form action="<?php echo e(route('employee.materials.hide', $m)); ?>" method="POST" class="mt-4 flex justify-end space-x-2">
+                            <?php echo csrf_field(); ?>
+                            <?php echo method_field('PATCH'); ?>
                             <button type="button" @click="hideId = null" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
                             <button type="submit" class="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700">Confirm</button>
                         </form>
                     </div>
                 </div>
 
-                @endforeach
+                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
             </tbody>
         </table>
         </div>
     </div>
 
-    {{-- Pagination --}}
+    
     <div class="mt-4">
-        {{ $materials->links() }}
+        <?php echo e($materials->links()); ?>
+
     </div>
 
-    {{-- Transaction History Section --}}
+    
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm mt-6">
         <div class="flex items-center justify-between px-4 py-3 border-b">
             <h3 class="text-base sm:text-lg font-semibold text-gray-800">📋 Stock Transaction History</h3>
             <span class="text-sm text-gray-500">Last 30 transactions</span>
         </div>
-        @if($recentTransactions->count() > 0)
+        <?php if($recentTransactions->count() > 0): ?>
             <div class="overflow-x-auto">
                 <table class="w-full border-collapse">
                     <thead class="bg-gray-50">
@@ -360,34 +360,34 @@
                         </tr>
                     </thead>
                     <tbody class="bg-white">
-                        @foreach($recentTransactions as $trans)
+                        <?php $__currentLoopData = $recentTransactions; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $trans): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                             <tr class="hover:bg-gray-50 border-b">
-                                <td class="px-4 py-3 text-sm text-gray-700">{{ $trans->created_at->format('M d, Y H:i') }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900 font-medium">{{ $trans->user?->name ?? 'N/A' }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900">{{ $trans->material?->name ?? 'N/A' }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-700"><?php echo e($trans->created_at->format('M d, Y H:i')); ?></td>
+                                <td class="px-4 py-3 text-sm text-gray-900 font-medium"><?php echo e($trans->user?->name ?? 'N/A'); ?></td>
+                                <td class="px-4 py-3 text-sm text-gray-900"><?php echo e($trans->material?->name ?? 'N/A'); ?></td>
                                 <td class="px-4 py-3 text-sm">
-                                    @if($trans->type === 'in')
+                                    <?php if($trans->type === 'in'): ?>
                                         <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-700 font-semibold">📥 Stock In</span>
-                                    @else
+                                    <?php else: ?>
                                         <span class="px-2 py-1 text-xs rounded bg-orange-100 text-orange-700 font-semibold">📤 Stock Out</span>
-                                    @endif
+                                    <?php endif; ?>
                                 </td>
-                                <td class="px-4 py-3 text-sm text-gray-900 font-medium">{{ $trans->quantity }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-700">{{ $trans->material?->unit ?? 'N/A' }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate" title="{{ $trans->remarks }}">{{ $trans->remarks ?? '-' }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-900 font-medium"><?php echo e($trans->quantity); ?></td>
+                                <td class="px-4 py-3 text-sm text-gray-700"><?php echo e($trans->material?->unit ?? 'N/A'); ?></td>
+                                <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate" title="<?php echo e($trans->remarks); ?>"><?php echo e($trans->remarks ?? '-'); ?></td>
                             </tr>
-                        @endforeach
+                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                     </tbody>
                 </table>
             </div>
-        @else
+        <?php else: ?>
             <div class="p-6 text-center text-gray-500">
                 <p>No transactions yet. Start managing stock to see transaction history.</p>
             </div>
-        @endif
+        <?php endif; ?>
     </div>
 
-    {{-- Card: Hidden Materials --}}
+    
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm mt-6">
         <div class="flex items-center justify-between px-4 py-3 border-b">
             <h3 class="text-base sm:text-lg font-semibold text-gray-800">Hidden Materials</h3>
@@ -403,26 +403,27 @@
                 </tr>
             </thead>
             <tbody class="bg-white">
-                @foreach($hiddenMaterials as $m)
+                <?php $__currentLoopData = $hiddenMaterials; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $m): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                 <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-3 border-b text-sm text-gray-900">{{ $m->name }}</td>
-                    <td class="px-4 py-3 border-b text-sm text-gray-700">{{ $m->unit }}</td>
+                    <td class="px-4 py-3 border-b text-sm text-gray-900"><?php echo e($m->name); ?></td>
+                    <td class="px-4 py-3 border-b text-sm text-gray-700"><?php echo e($m->unit); ?></td>
                     <td class="px-4 py-3 border-b text-sm">
                         <span class="px-2 py-1 bg-gray-500 text-white rounded">Hidden</span>
                     </td>
                     <td class="px-4 py-3 border-b text-sm">
-                        <form action="{{ route('employee.materials.unhide', $m) }}" method="POST" class="inline">
-                            @csrf
-                            @method('PATCH')
+                        <form action="<?php echo e(route('employee.materials.unhide', $m)); ?>" method="POST" class="inline">
+                            <?php echo csrf_field(); ?>
+                            <?php echo method_field('PATCH'); ?>
                             <button class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Unhide</button>
                         </form>
                     </td>
                 </tr>
-                @endforeach
+                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
             </tbody>
         </table>
         </div>
     </div>
 
 </div>
-@endsection
+<?php $__env->stopSection(); ?>
+<?php echo $__env->make('layouts.employee', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH C:\xampp\htdocs\wowc\resources\views/employee/raw-materials-db.blade.php ENDPATH**/ ?>

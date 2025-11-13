@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Employee;
 use App\Http\Controllers\Controller;
 use App\Models\Item;
 use App\Models\ItemPhoto;
+use App\Models\ItemStockTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Auth;
 
 class ItemController extends Controller
 {
@@ -44,7 +46,13 @@ class ItemController extends Controller
             ->paginate(15, ['*'], 'hidden_page')
             ->withQueryString();
 
-        return view('employee.items-db', compact('visibleItems', 'hiddenItems', 'search'));
+        // Get recent transactions for history display
+        $recentTransactions = ItemStockTransaction::with(['item', 'user'])
+            ->orderBy('created_at', 'desc')
+            ->limit(30)
+            ->get();
+
+        return view('employee.items-db', compact('visibleItems', 'hiddenItems', 'search', 'recentTransactions'));
     }
 
     public function store(Request $request)
@@ -148,9 +156,148 @@ class ItemController extends Controller
 
         return response()->json([
             'success' => true,
-            'deleted_from_disk' => $deletedFromDisk,
-            'message' => 'Photo deleted successfully',
+            'message' => 'Photo deleted successfully'
         ]);
+    }
+
+    // Add stock to item
+    public function addStock(Request $request, Item $item)
+    {
+        $data = $request->validate([
+            'quantity' => 'required|integer|min:1',
+            'remarks' => 'nullable|string|max:500',
+        ]);
+
+        $added = (int) $data['quantity'];
+
+        // Use transaction to allocate stock to pending backorders
+        \DB::transaction(function () use ($item, $added, $data) {
+            $item->increment('stock', $added);
+
+            // Record transaction
+            ItemStockTransaction::create([
+                'item_id' => $item->id,
+                'user_id' => Auth::id(),
+                'type' => 'in',
+                'quantity' => $added,
+                'remarks' => $data['remarks'] ?? null,
+            ]);
+
+            // Re-load to get updated stock
+            $item->refresh();
+            $available = (int) $item->stock;
+
+            if ($available <= 0) {
+                return;
+            }
+
+            // Find pending backorder order items (FIFO)
+            $pending = \App\Models\OrderItem::where('item_id', $item->id)
+                ->where('is_backorder', true)
+                ->where('backorder_status', \App\Models\OrderItem::BO_PENDING)
+                ->orderBy('created_at')
+                ->get();
+
+            foreach ($pending as $oi) {
+                if ($available <= 0) break;
+
+                if ($oi->quantity <= $available) {
+                    // We can fulfill this order item now
+                    $oi->backorder_status = \App\Models\OrderItem::BO_IN_PROGRESS;
+                    $oi->save();
+
+                    // Notify customer that their backorder is now ready for fulfillment
+                    try {
+                        $oi->loadMissing('order.user');
+                        if ($oi->order && $oi->order->user && $oi->order->user->email) {
+                            \Mail::to($oi->order->user->email)->send(new \App\Mail\BackorderReady($oi));
+                        }
+                    } catch (\Throwable $e) {
+                        // swallow mail errors but log them
+                        \Log::error('Failed to send backorder ready email', ['error' => $e->getMessage(), 'order_item_id' => $oi->id]);
+                    }
+
+                    $available -= $oi->quantity;
+                }
+            }
+
+            // Persist remaining stock
+            $item->stock = $available;
+            $item->save();
+        });
+
+        return back()->with('status', 'Item stock updated and backorders allocated');
+    }
+
+    /**
+     * Bulk add stock for multiple items in one transaction
+     */
+    public function bulkAddStock(Request $request)
+    {
+        $data = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.item_id' => 'required|exists:items,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'remarks' => 'nullable|string|max:500',
+        ]);
+
+        $transactionCount = 0;
+
+        foreach ($data['items'] as $itemData) {
+            $item = Item::find($itemData['item_id']);
+            $quantity = (int)$itemData['quantity'];
+
+            $item->increment('stock', $quantity);
+
+            // Record transaction
+            ItemStockTransaction::create([
+                'item_id' => $item->id,
+                'user_id' => Auth::id(),
+                'type' => 'in',
+                'quantity' => $quantity,
+                'remarks' => $data['remarks'] ?? null,
+            ]);
+
+            $transactionCount++;
+        }
+
+        return back()->with('status', "Added stock for {$transactionCount} item(s)");
+    }
+
+    /**
+     * Bulk reduce stock for multiple items in one transaction
+     */
+    public function bulkReduceStock(Request $request)
+    {
+        $data = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.item_id' => 'required|exists:items,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'remarks' => 'nullable|string|max:500',
+        ]);
+
+        $transactionCount = 0;
+
+        foreach ($data['items'] as $itemData) {
+            $item = Item::find($itemData['item_id']);
+            $quantity = (int)$itemData['quantity'];
+
+            $newStock = max(0, (int) $item->stock - $quantity);
+            $item->update(['stock' => $newStock]);
+
+            // Record transaction
+            ItemStockTransaction::create([
+                'item_id' => $item->id,
+                'user_id' => Auth::id(),
+                'type' => 'out',
+                'quantity' => $quantity,
+                'remarks' => $data['remarks'] ?? null,
+            ]);
+
+            $transactionCount++;
+        }
+
+        return back()->with('status', "Reduced stock for {$transactionCount} item(s)");
     }
 }
 

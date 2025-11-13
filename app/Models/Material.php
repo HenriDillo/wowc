@@ -20,5 +20,11 @@ class Material extends Model
         'is_hidden' => 'boolean',
     ];
 
-    // No stock/quantity tracking anymore
+    /**
+     * Stock transactions for this material
+     */
+    public function transactions()
+    {
+        return $this->hasMany(MaterialStockTransaction::class);
+    }
 }

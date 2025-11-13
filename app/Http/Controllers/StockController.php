@@ -25,6 +25,21 @@ class StockController extends Controller
     }
 
     /**
+     * Display the Employee Consolidated Stock Management page.
+     */
+    public function employeeIndex()
+    {
+        if (!Auth::user() || Auth::user()->role !== 'employee') {
+            abort(403, 'Unauthorized');
+        }
+
+        $items = Item::orderBy('name')->with('photos')->get();
+        $materials = Material::orderBy('name')->get();
+
+        return view('employee.stock-management', compact('items', 'materials'));
+    }
+
+    /**
      * Add stock for an Item.
      */
     public function addItemStock(Request $request, Item $item)
