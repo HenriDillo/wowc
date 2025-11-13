@@ -12,7 +12,7 @@
 </head>
 <body x-data="{ dropdownOpen: false, mobileMenuOpen: false, scrolled: false }" @scroll.window="scrolled = window.scrollY > 4" class="bg-white" style="font-family: 'Poppins', 'Inter', ui-sans-serif, system-ui;">
 
-    @include('partials.customer-header')
+    <?php echo $__env->make('partials.customer-header', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 
     <!-- Hero Section -->
     <section class="relative pt-24">
@@ -25,7 +25,7 @@
             <div class="flex items-center justify-center py-24 md:py-40">
                 <div class="bg-white/80 backdrop-blur rounded-xl shadow-lg p-8 md:p-12 text-center max-w-2xl">
                     <h1 class="text-3xl md:text-5xl font-semibold text-gray-900 mb-6">Wow Carmen Handicrafts</h1>
-                    <a href="{{ route('products.index') }}" class="inline-block px-8 py-3 rounded-md text-white font-medium transition transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2" style="background:#c59d5f;">
+                    <a href="<?php echo e(route('products.index')); ?>" class="inline-block px-8 py-3 rounded-md text-white font-medium transition transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2" style="background:#c59d5f;">
                         Shop Now
                     </a>
                 </div>
@@ -43,19 +43,19 @@
 
             <!-- Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-8">
-                @forelse(($products ?? []) as $product)
+                <?php $__empty_1 = true; $__currentLoopData = ($products ?? []); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $product): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
                     <!-- Product Card -->
-                    <a href="{{ url('/products/'.$product->id) }}" class="group block bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition hover:-translate-y-0.5">
+                    <a href="<?php echo e(url('/products/'.$product->id)); ?>" class="group block bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition hover:-translate-y-0.5">
                         <div class="aspect-[4/3] bg-gray-100 rounded-t-xl overflow-hidden">
-                            <img src="{{ $product->photo_url ?? '' }}" alt="{{ $product->name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+                            <img src="<?php echo e($product->photo_url ?? ''); ?>" alt="<?php echo e($product->name); ?>" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
                         </div>
                         <div class="p-4">
-                            <h3 class="text-sm md:text-base font-medium text-gray-900 truncate">{{ $product->name }}</h3>
-                            <p class="mt-1 text-[#c59d5f] font-semibold">₱{{ number_format($product->price, 2) }}</p>
+                            <h3 class="text-sm md:text-base font-medium text-gray-900 truncate"><?php echo e($product->name); ?></h3>
+                            <p class="mt-1 text-[#c59d5f] font-semibold">₱<?php echo e(number_format($product->price, 2)); ?></p>
                         </div>
                     </a>
-                @empty
-                    @for($i=0;$i<8;$i++)
+                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
+                    <?php for($i=0;$i<8;$i++): ?>
                         <div class="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition">
                             <div class="aspect-[4/3] bg-gray-100 rounded-t-xl"></div>
                             <div class="p-4 text-center">
@@ -63,13 +63,13 @@
                                 <p class="text-[#c59d5f] font-semibold">Price</p>
                             </div>
                         </div>
-                    @endfor
-                @endforelse
+                    <?php endfor; ?>
+                <?php endif; ?>
             </div>
         </div>
     </section>
 
-    @include('partials.customer-footer')
+    <?php echo $__env->make('partials.customer-footer', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 
 </body>
-</html>
+</html><?php /**PATH C:\xampp\htdocs\wowc\resources\views/customer.blade.php ENDPATH**/ ?>

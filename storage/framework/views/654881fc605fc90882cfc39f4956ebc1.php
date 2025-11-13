@@ -9,11 +9,11 @@
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 	<script src="https://cdn.tailwindcss.com"></script>
 	<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-	<meta name="csrf-token" content="{{ csrf_token() }}">
+	<meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
 </head>
 <body x-data="{ dropdownOpen:false, mobileMenuOpen:false, scrolled:false, method:'Bank' }" @scroll.window="scrolled = window.scrollY > 4" class="bg-white" style="font-family:'Poppins','Inter',ui-sans-serif,system-ui;">
 
-	@include('partials.customer-header')
+	<?php echo $__env->make('partials.customer-header', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 
 	<section class="pt-24 pb-16">
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -22,34 +22,34 @@
 			<div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-10">
 				<!-- Left: Account & Shipping -->
                 <div>
-                    <form method="POST" action="{{ route('checkout.store') }}" class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
-						@csrf
+                    <form method="POST" action="<?php echo e(route('checkout.store')); ?>" class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+						<?php echo csrf_field(); ?>
 						<h2 class="text-lg font-semibold text-gray-900">Account</h2>
-                        <input type="email" value="{{ $user->email ?? '' }}" disabled class="mt-3 w-full rounded-md border-gray-300"/>
-                        @if(isset($payOrder) && $payOrder)
-							<p class="mt-2 text-sm text-gray-700">Pay for Custom Order <span class="font-medium">#{{ $payOrder->id }}</span>. Choose a payment method below to complete your purchase.</p>
-                        @endif
+                        <input type="email" value="<?php echo e($user->email ?? ''); ?>" disabled class="mt-3 w-full rounded-md border-gray-300"/>
+                        <?php if(isset($payOrder) && $payOrder): ?>
+							<p class="mt-2 text-sm text-gray-700">Pay for Custom Order <span class="font-medium">#<?php echo e($payOrder->id); ?></span>. Choose a payment method below to complete your purchase.</p>
+                        <?php endif; ?>
 
-                        @if ($errors->any())
+                        <?php if($errors->any()): ?>
                             <div class="mt-4 text-sm text-red-600">
                                 <ul class="list-disc ml-5 space-y-1">
-                                    @foreach ($errors->all() as $error)
-                                        <li>{{ $error }}</li>
-                                    @endforeach
+                                    <?php $__currentLoopData = $errors->all(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $error): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                        <li><?php echo e($error); ?></li>
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </ul>
                             </div>
-                        @endif
+                        <?php endif; ?>
 
 						<h3 class="mt-6 text-lg font-semibold text-gray-900">Shipping Information</h3>
                         <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            @php $addr = optional($user?->address); @endphp
-                            <input name="first_name" value="{{ old('first_name', $user->first_name ?? '') }}" placeholder="First Name" class="rounded-md border-gray-300" required>
-                            <input name="last_name" value="{{ old('last_name', $user->last_name ?? '') }}" placeholder="Last Name" class="rounded-md border-gray-300" required>
-                            <input name="address_line" value="{{ old('address_line', $addr->address_line ?? '') }}" placeholder="Address" class="sm:col-span-2 rounded-md border-gray-300" required>
-                            <input name="city" value="{{ old('city', $addr->city ?? '') }}" placeholder="City" class="rounded-md border-gray-300" required>
-                            <input name="postal_code" value="{{ old('postal_code', $addr->postal_code ?? '') }}" placeholder="Postal Code" class="rounded-md border-gray-300" required>
-                            <input name="province" value="{{ old('province', $addr->province ?? '') }}" placeholder="Province" class="rounded-md border-gray-300" required>
-                            <input name="phone_number" value="{{ old('phone_number', $addr->phone_number ?? '') }}" placeholder="Phone Number" class="sm:col-span-2 rounded-md border-gray-300" required>
+                            <?php $addr = optional($user?->address); ?>
+                            <input name="first_name" value="<?php echo e(old('first_name', $user->first_name ?? '')); ?>" placeholder="First Name" class="rounded-md border-gray-300" required>
+                            <input name="last_name" value="<?php echo e(old('last_name', $user->last_name ?? '')); ?>" placeholder="Last Name" class="rounded-md border-gray-300" required>
+                            <input name="address_line" value="<?php echo e(old('address_line', $addr->address_line ?? '')); ?>" placeholder="Address" class="sm:col-span-2 rounded-md border-gray-300" required>
+                            <input name="city" value="<?php echo e(old('city', $addr->city ?? '')); ?>" placeholder="City" class="rounded-md border-gray-300" required>
+                            <input name="postal_code" value="<?php echo e(old('postal_code', $addr->postal_code ?? '')); ?>" placeholder="Postal Code" class="rounded-md border-gray-300" required>
+                            <input name="province" value="<?php echo e(old('province', $addr->province ?? '')); ?>" placeholder="Province" class="rounded-md border-gray-300" required>
+                            <input name="phone_number" value="<?php echo e(old('phone_number', $addr->phone_number ?? '')); ?>" placeholder="Phone Number" class="sm:col-span-2 rounded-md border-gray-300" required>
                         </div>
 
 						<h3 class="mt-6 text-lg font-semibold text-gray-900">Payment</h3>
@@ -77,82 +77,82 @@
 				<!-- Right: Summary -->
 				<div class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
 					<h2 class="text-lg font-semibold text-gray-900">Order Summary</h2>
-                        @php
+                        <?php
 							$paymentOnly = isset($payOrder) && $payOrder;
                             // Use the cart line's is_backorder flag to separate standard vs backorder
                             $standardItems = $paymentOnly ? collect() : $cartItems->filter(fn($ci) => !($ci->is_backorder ?? false));
                             $backOrderItems = $paymentOnly ? collect() : $cartItems->filter(fn($ci) => ($ci->is_backorder ?? false));
                             $standardTotal = $paymentOnly ? 0 : $standardItems->sum('subtotal');
                             $backOrderTotal = $paymentOnly ? 0 : $backOrderItems->sum('subtotal');
-                        @endphp
+                        ?>
 
                         <!-- Standard Items -->
-                        @if(!$paymentOnly && $standardItems->isNotEmpty())
+                        <?php if(!$paymentOnly && $standardItems->isNotEmpty()): ?>
                             <div class="mt-4">
                                 <h3 class="text-sm font-medium text-gray-900">Standard Items</h3>
                                 <div class="mt-3 space-y-4">
-                                    @foreach($standardItems as $ci)
+                                    <?php $__currentLoopData = $standardItems; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $ci): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                         <div class="flex items-center justify-between gap-4">
                                             <div class="flex items-center gap-3">
                                                 <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
-                                                    <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
+                                                    <img src="<?php echo e(optional($ci->item->photos->first())->url); ?>" alt="" class="w-full h-full object-cover"/>
                                                 </div>
                                                 <div>
-                                                    <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
-                                                    <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
+                                                    <p class="text-sm font-medium text-gray-900"><?php echo e($ci->item->name); ?></p>
+                                                    <p class="text-xs text-gray-500">Qty: <?php echo e($ci->quantity); ?></p>
                                                 </div>
                                             </div>
                                             <div class="text-right">
-                                                <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
+                                                <p class="text-sm text-gray-900">₱<?php echo e(number_format($ci->subtotal, 2)); ?></p>
                                             </div>
                                         </div>
-                                    @endforeach
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </div>
-                                @if($backOrderItems->isNotEmpty())
-                                    <p class="mt-2 text-sm text-gray-700">Standard items subtotal: ₱{{ number_format($standardTotal, 2) }}</p>
-                                @endif
+                                <?php if($backOrderItems->isNotEmpty()): ?>
+                                    <p class="mt-2 text-sm text-gray-700">Standard items subtotal: ₱<?php echo e(number_format($standardTotal, 2)); ?></p>
+                                <?php endif; ?>
                             </div>
-                        @endif
+                        <?php endif; ?>
 
                         <!-- Back Order Items -->
-                        @if(!$paymentOnly && $backOrderItems->isNotEmpty())
+                        <?php if(!$paymentOnly && $backOrderItems->isNotEmpty()): ?>
                             <div class="mt-6">
                                 <div class="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
                                     <h3 class="text-sm font-medium text-blue-800">Back Order Items</h3>
                                     <p class="mt-1 text-xs text-blue-700">These items will be shipped separately once they're back in stock.</p>
                                 </div>
                                 <div class="space-y-4">
-                                    @foreach($backOrderItems as $ci)
+                                    <?php $__currentLoopData = $backOrderItems; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $ci): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                         <div class="flex items-center justify-between gap-4">
                                             <div class="flex items-center gap-3">
                                                 <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
-                                                    <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
+                                                    <img src="<?php echo e(optional($ci->item->photos->first())->url); ?>" alt="" class="w-full h-full object-cover"/>
                                                 </div>
                                                 <div>
-                                                    <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
-                                                    <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
+                                                    <p class="text-sm font-medium text-gray-900"><?php echo e($ci->item->name); ?></p>
+                                                    <p class="text-xs text-gray-500">Qty: <?php echo e($ci->quantity); ?></p>
                                                     <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] rounded bg-blue-100 text-blue-800">Back-Order</span>
-                                                    @if($ci->item->restock_date)
-                                                        <span class="block text-[11px] text-blue-700">Ships after {{ $ci->item->restock_date->format('M d, Y') }}</span>
-                                                    @endif
+                                                    <?php if($ci->item->restock_date): ?>
+                                                        <span class="block text-[11px] text-blue-700">Ships after <?php echo e($ci->item->restock_date->format('M d, Y')); ?></span>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                             <div class="text-right">
-                                                <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
+                                                <p class="text-sm text-gray-900">₱<?php echo e(number_format($ci->subtotal, 2)); ?></p>
                                             </div>
                                         </div>
-                                    @endforeach
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </div>
-                                @if($standardItems->isNotEmpty())
-                                    <p class="mt-2 text-sm text-gray-700">Back order items subtotal: ₱{{ number_format($backOrderTotal, 2) }}</p>
-                                @endif
+                                <?php if($standardItems->isNotEmpty()): ?>
+                                    <p class="mt-2 text-sm text-gray-700">Back order items subtotal: ₱<?php echo e(number_format($backOrderTotal, 2)); ?></p>
+                                <?php endif; ?>
                             </div>
-                        @endif
+                        <?php endif; ?>
                         </div>
 
                     <div class="mt-6 border-t pt-4 space-y-2 text-sm">
-						@if($paymentOnly)
-							@php
+						<?php if($paymentOnly): ?>
+							<?php
 								$coStatus = optional($payOrder->customOrders->first())->status ?? $payOrder->status;
 								$badge = match($coStatus){
 									'in_production' => 'bg-blue-100 text-blue-800',
@@ -163,24 +163,24 @@
 									default => 'bg-gray-100 text-gray-800',
 								};
 								$coStatusLabel = ucfirst(str_replace('_',' ', $coStatus ?? 'pending'));
-							@endphp
+							?>
 							<div class="mb-3 p-3 border border-gray-200 rounded-lg">
-								<div class="text-sm font-medium text-gray-900">Custom Order #{{ $payOrder->id }}</div>
+								<div class="text-sm font-medium text-gray-900">Custom Order #<?php echo e($payOrder->id); ?></div>
 								<div class="mt-1 text-xs text-gray-600 flex items-center gap-2">
 									<span>Status:</span>
-									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium {{ $badge }}">{{ $coStatusLabel }}</span>
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium <?php echo e($badge); ?>"><?php echo e($coStatusLabel); ?></span>
 								</div>
 							</div>
-						@endif
-						<div class="flex items-center justify-between"><span class="text-gray-600">Subtotal</span><span>₱{{ number_format($total, 2) }}</span></div>
-						@if(!$paymentOnly)
-							<div class="flex items-center justify-between"><span class="text-gray-600">Shipping</span><span>₱{{ number_format($shipping, 2) }}</span></div>
-						@endif
-						<div class="flex items-center justify-between font-semibold text-gray-900"><span>Total</span><span>₱{{ number_format($total, 2) }}</span></div>
+						<?php endif; ?>
+						<div class="flex items-center justify-between"><span class="text-gray-600">Subtotal</span><span>₱<?php echo e(number_format($total, 2)); ?></span></div>
+						<?php if(!$paymentOnly): ?>
+							<div class="flex items-center justify-between"><span class="text-gray-600">Shipping</span><span>₱<?php echo e(number_format($shipping, 2)); ?></span></div>
+						<?php endif; ?>
+						<div class="flex items-center justify-between font-semibold text-gray-900"><span>Total</span><span>₱<?php echo e(number_format($total, 2)); ?></span></div>
 						<p class="text-xs text-gray-500 mt-2">Tax and shipping cost will be calculated later.</p>
-                        @if(!$paymentOnly && $cartItems->contains(fn($ci) => ($ci->is_backorder ?? false)))
+                        <?php if(!$paymentOnly && $cartItems->contains(fn($ci) => ($ci->is_backorder ?? false))): ?>
                             <p class="text-xs text-blue-700 mt-1">This item is on back order. We'll ship it once restocked.</p>
-                        @endif
+                        <?php endif; ?>
 					</div>
 				</div>
 			</div>
@@ -225,7 +225,7 @@
 		</div>
 	</div>
 
-	@include('partials.customer-footer')
+	<?php echo $__env->make('partials.customer-footer', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 
 </body>
 </html>
@@ -233,12 +233,12 @@
 <script>
 const csrf = document.querySelector('meta[name="csrf-token"]').content;
 const completeBtn = document.getElementById('completeBtn');
-const form = document.querySelector('form[action="{{ route('checkout.store') }}"]');
+const form = document.querySelector('form[action="<?php echo e(route('checkout.store')); ?>"]');
 const gcashModal = document.getElementById('gcashModal');
 const bankModal = document.getElementById('bankModal');
 // If paying an existing order, expose IDs for JS
-window.payOrderId = {{ isset($payOrder) && $payOrder ? $payOrder->id : 'null' }};
-window.payAmount = {{ isset($payOrder) && $payOrder ? (float) $payOrder->total_amount : 0 }};
+window.payOrderId = <?php echo e(isset($payOrder) && $payOrder ? $payOrder->id : 'null'); ?>;
+window.payAmount = <?php echo e(isset($payOrder) && $payOrder ? (float) $payOrder->total_amount : 0); ?>;
 
 function openModal(id){ const el = document.getElementById(id); el.classList.remove('hidden'); el.classList.add('flex'); }
 function closeModal(id){ const el = document.getElementById(id); el.classList.add('hidden'); el.classList.remove('flex'); }
@@ -299,7 +299,7 @@ document.getElementById('gcashConfirmBtn').addEventListener('click', async () =>
 	try{
 		const o = await createOrder();
 		const params = new URLSearchParams({ order_id: o.order_id, amount: o.total, reference: ref });
-		const res = await fetch('{{ route('payments.gcash') }}', { method:'POST', headers:{ 'X-CSRF-TOKEN': csrf }, body: params });
+		const res = await fetch('<?php echo e(route('payments.gcash')); ?>', { method:'POST', headers:{ 'X-CSRF-TOKEN': csrf }, body: params });
 		if(!res.ok) {
 			const errData = await res.json().catch(() => ({}));
 			throw new Error(errData?.message || 'Failed to confirm GCash payment');
@@ -324,7 +324,7 @@ document.getElementById('bankSubmitBtn').addEventListener('click', async () => {
 		fd.append('order_id', o.order_id);
 		fd.append('amount', o.total);
 		fd.append('proof', file);
-		const res = await fetch('{{ route('payments.bank') }}', { method:'POST', headers:{ 'X-CSRF-TOKEN': csrf }, body: fd });
+		const res = await fetch('<?php echo e(route('payments.bank')); ?>', { method:'POST', headers:{ 'X-CSRF-TOKEN': csrf }, body: fd });
 		if(!res.ok) {
 			const errData = await res.json().catch(() => ({}));
 			throw new Error(errData?.message || 'Failed to upload bank proof');
@@ -340,3 +340,4 @@ document.getElementById('bankSubmitBtn').addEventListener('click', async () => {
 </script>
 
 
+<?php /**PATH C:\xampp\htdocs\wowc\resources\views/checkout.blade.php ENDPATH**/ ?>

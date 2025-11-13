@@ -6,6 +6,7 @@ use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\CustomOrder;
 use App\Models\Item;
+use App\Models\ItemStockTransaction;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Address;
@@ -151,6 +152,15 @@ class CheckoutController extends Controller
                         $item->stock = $available - $requestedQty;
                         $item->save();
 
+                        // Log stock transaction
+                        ItemStockTransaction::create([
+                            'item_id' => $item->id,
+                            'user_id' => $user?->id,
+                            'type' => 'out',
+                            'quantity' => $requestedQty,
+                            'remarks' => "Order #{$order->id} - Customer order fulfillment",
+                        ]);
+
                         OrderItem::create([
                             'order_id' => $order->id,
                             'item_id' => $item->id,
@@ -170,6 +180,15 @@ class CheckoutController extends Controller
                         $fulfilledSubtotal = $ci->price * $fulfilledQty;
                         $item->stock = 0;
                         $item->save();
+
+                        // Log stock transaction
+                        ItemStockTransaction::create([
+                            'item_id' => $item->id,
+                            'user_id' => $user?->id,
+                            'type' => 'out',
+                            'quantity' => $fulfilledQty,
+                            'remarks' => "Order #{$order->id} - Partial fulfillment (customer order)",
+                        ]);
 
                         OrderItem::create([
                             'order_id' => $order->id,
