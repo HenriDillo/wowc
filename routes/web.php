@@ -12,6 +12,7 @@ use App\Http\Controllers\CartController as CartPageController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Customer\OrderController as CustomerOrderController;
 use App\Http\Controllers\CustomOrderController;
+use App\Http\Controllers\PaymentController;
 use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
@@ -24,15 +25,18 @@ Route::prefix('')->group(function () {
     Route::get('/products/{item}', [ProductController::class, 'show'])->name('products.show');
     // customer-facing cart page
     Route::get('/cart', [CartPageController::class, 'page'])->name('cart');
+    
+    // Custom Orders - Public Access for Create Form
+    Route::get('/custom-order', [CustomOrderController::class, 'create'])->name('custom-order');
+    Route::get('/custom-orders/create', [CustomOrderController::class, 'create'])->name('custom-orders.create');
 });
 
 // Checkout (authenticated)
 Route::middleware('auth')->group(function () {
     Route::get('/checkout', [CheckoutController::class, 'page'])->name('checkout.page');
     
-    // Custom Orders
+    // Custom Orders - Authenticated Actions
     Route::prefix('custom-orders')->name('custom-orders.')->group(function () {
-        Route::get('/create', [CustomOrderController::class, 'create'])->name('create');
         Route::post('/', [CustomOrderController::class, 'store'])->name('store');
         Route::get('/{id}', [CustomOrderController::class, 'show'])->name('show');
     });
@@ -114,22 +118,23 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::get('/raw-materials', [MaterialController::class, 'index'])->name('raw-materials');
     Route::post('/raw-materials', [MaterialController::class, 'store'])->name('materials.store');
     Route::put('/raw-materials/{material}', [MaterialController::class, 'update'])->name('materials.update');
-    Route::patch('/raw-materials/{material}/hide', [MaterialController::class, 'hide'])->name('materials.hide');
-    Route::patch('/raw-materials/{material}/unhide', [MaterialController::class, 'unhide'])->name('materials.unhide');
     Route::post('/raw-materials/{material}/add-stock', [MaterialController::class, 'addStock'])->name('materials.add-stock');
     Route::post('/raw-materials/{material}/reduce-stock', [MaterialController::class, 'reduceStock'])->name('materials.reduce-stock');
-    Route::post('/raw-materials/bulk/add-stock', [MaterialController::class, 'bulkAddStock'])->name('materials.bulk-add-stock');
-    Route::post('/raw-materials/bulk/reduce-stock', [MaterialController::class, 'bulkReduceStock'])->name('materials.bulk-reduce-stock');
+    Route::patch('/raw-materials/{material}/hide', [MaterialController::class, 'hide'])->name('materials.hide');
+    Route::patch('/raw-materials/{material}/unhide', [MaterialController::class, 'unhide'])->name('materials.unhide');
+    Route::post('/raw-materials/bulk-add-stock', [MaterialController::class, 'bulkAddStock'])->name('materials.bulk-add-stock');
+    Route::post('/raw-materials/bulk-reduce-stock', [MaterialController::class, 'bulkReduceStock'])->name('materials.bulk-reduce-stock');
 
     // Items
     Route::get('/items', [ItemController::class, 'index'])->name('items');
     Route::post('/items', [ItemController::class, 'store'])->name('items.store');
     Route::put('/items/{item}', [ItemController::class, 'update'])->name('items.update');
     Route::patch('/items/{item}/toggle', [ItemController::class, 'toggleVisibility'])->name('items.toggle');
-    Route::post('/items/{item}/add-stock', [ItemController::class, 'addStock'])->name('items.add-stock');
-    Route::post('/items/bulk/add-stock', [ItemController::class, 'bulkAddStock'])->name('items.bulk-add-stock');
-    Route::post('/items/bulk/reduce-stock', [ItemController::class, 'bulkReduceStock'])->name('items.bulk-reduce-stock');
     Route::delete('/items/photos/{photo}', [ItemController::class, 'destroyPhoto'])->name('items.photos.destroy');
+    Route::post('/items/{item}/add-stock', [ItemController::class, 'addStock'])->name('items.add-stock');
+    Route::post('/items/{item}/reduce-stock', [ItemController::class, 'reduceStock'])->name('items.reduce-stock');
+    Route::post('/items/bulk-add-stock', [ItemController::class, 'bulkAddStock'])->name('items.bulk-add-stock');
+    Route::post('/items/bulk-reduce-stock', [ItemController::class, 'bulkReduceStock'])->name('items.bulk-reduce-stock');
 
     // Orders
     Route::get('/orders', [\App\Http\Controllers\Employee\OrderController::class, 'index'])->name('orders');
@@ -138,6 +143,11 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::delete('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'destroy'])->name('orders.destroy');
     // Per-order-item backorder updates
     Route::post('/orders/{order}/items/{item}/backorder', [\App\Http\Controllers\Employee\OrderController::class, 'updateItemBackorder'])->name('orders.items.backorder');
+
+    // Custom Orders - Employee review
+    Route::get('/custom-orders/{id}', [\App\Http\Controllers\Employee\CustomOrderController::class, 'show'])->name('custom-orders.show');
+    Route::put('/custom-orders/{id}', [\App\Http\Controllers\Employee\CustomOrderController::class, 'update'])->name('custom-orders.update');
+    Route::put('/custom-orders/{id}/confirm', [\App\Http\Controllers\Employee\CustomOrderController::class, 'confirm'])->name('custom-orders.confirm');
 });
 
 // Admin routes (authenticated, prefixed and named)
@@ -161,18 +171,19 @@ Route::prefix('api/v1')->middleware('web')->name('api.cart.')->group(function ()
     Route::post('/cart/add', [CartController::class, 'addToCart'])->name('add');
     Route::post('/cart/{cartItemId}/remove', [CartController::class, 'removeFromCart'])->name('remove');
     Route::post('/cart/{cartItemId}/quantity', [CartController::class, 'updateQuantity'])->name('quantity');
-    Route::get('/cart', [CartController::class, 'showCart'])->name('show');
-
-    // Custom order cart operations
-    Route::post('/cart/custom/add', [CartController::class, 'addCustomToCart'])->name('custom.add');
-    Route::post('/cart/custom/{customCartItemId}/remove', [CartController::class, 'removeCustomFromCart'])->name('custom.remove');
-    Route::post('/cart/custom/{customCartItemId}/quantity', [CartController::class, 'updateCustomQuantity'])->name('custom.quantity');
+		Route::get('/cart', [CartController::class, 'showCart'])->name('show');
 });
 
 // Backwards-compatible non-prefixed cart endpoints used by some pages/tests (POSTs only)
 Route::post('/cart/add', [CartController::class, 'addToCart'])->name('cart.add');
 Route::post('/cart/{cartItemId}/remove', [CartController::class, 'removeFromCart'])->name('cart.remove');
 Route::post('/cart/{cartItemId}/quantity', [CartController::class, 'updateQuantity'])->name('cart.quantity');
+
+// Payments (AJAX)
+Route::middleware('auth')->group(function () {
+	Route::post('/payments/gcash', [PaymentController::class, 'confirmGCash'])->name('payments.gcash');
+	Route::post('/payments/bank', [PaymentController::class, 'uploadBankProof'])->name('payments.bank');
+});
 
 // Fallback media route when public/storage symlink isn't available
 Route::get('/media/{path}', function ($path) {
