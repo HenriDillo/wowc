@@ -28,20 +28,13 @@
                     <path d="M4 3h12a1 1 0 011 1v3H3V4a1 1 0 011-1z"></path>
                     <path d="M3 8h14v8a1 1 0 01-1 1H4a1 1 0 01-1-1V8z"></path>
                 </svg>
-                <span class="font-medium">Raw Materials</span>
+                <span class="font-medium">Raw Materials Management</span>
             </a>
             <a href="{{ route('employee.items') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M6 3a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V4a1 1 0 00-1-1H6z"></path>
                 </svg>
-                <span class="font-medium">Item Management</span>
-            </a>
-            <a href="{{ route('admin.stock.index') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M4 3h12a1 1 0 011 1v3H3V4a1 1 0 011-1z"></path>
-                    <path d="M3 8h14v8a1 1 0 01-1 1H4a1 1 0 01-1-1V8z"></path>
-                </svg>
-                <span class="font-medium">Stock Management</span>
+                <span class="font-medium">Production Management</span>
             </a>
             <a href="{{ route('employee.orders') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">

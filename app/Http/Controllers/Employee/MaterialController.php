@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Employee;
 
 use App\Http\Controllers\Controller;
 use App\Models\Material;
+use App\Models\MaterialStockTransaction;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class MaterialController extends Controller
 {
@@ -19,7 +21,13 @@ class MaterialController extends Controller
             ->orderBy('name')
             ->paginate(15);
 
-        return view('employee.raw-materials-db', compact('materials', 'hiddenMaterials'));
+        // Get recent transactions for history display
+        $recentTransactions = MaterialStockTransaction::with(['material', 'user'])
+            ->orderBy('created_at', 'desc')
+            ->limit(30)
+            ->get();
+
+        return view('employee.raw-materials-db', compact('materials', 'hiddenMaterials', 'recentTransactions'));
     }
 
     // Store new material
@@ -81,5 +89,121 @@ class MaterialController extends Controller
         $material->save();
 
         return back()->with('status', 'Material unhidden');
+    }
+
+    // Add stock to material
+    public function addStock(Request $request, Material $material)
+    {
+        $data = $request->validate([
+            'quantity' => 'required|integer|min:1',
+            'remarks' => 'nullable|string|max:500',
+        ]);
+
+        $material->increment('stock', $data['quantity']);
+
+        // Record transaction
+        MaterialStockTransaction::create([
+            'material_id' => $material->id,
+            'user_id' => Auth::id(),
+            'type' => 'in',
+            'quantity' => $data['quantity'],
+            'remarks' => $data['remarks'] ?? null,
+        ]);
+
+        return back()->with('status', 'Material stock increased');
+    }
+
+    // Reduce stock from material
+    public function reduceStock(Request $request, Material $material)
+    {
+        $data = $request->validate([
+            'quantity' => 'required|integer|min:1',
+            'remarks' => 'nullable|string|max:500',
+        ]);
+
+        $newStock = max(0, (int) $material->stock - (int) $data['quantity']);
+        $material->update(['stock' => $newStock]);
+
+        // Record transaction
+        MaterialStockTransaction::create([
+            'material_id' => $material->id,
+            'user_id' => Auth::id(),
+            'type' => 'out',
+            'quantity' => $data['quantity'],
+            'remarks' => $data['remarks'] ?? null,
+        ]);
+
+        return back()->with('status', 'Material stock reduced');
+    }
+
+    /**
+     * Bulk add stock for multiple materials in one transaction
+     */
+    public function bulkAddStock(Request $request)
+    {
+        $data = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.material_id' => 'required|exists:materials,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'remarks' => 'nullable|string|max:500',
+        ]);
+
+        $transactionCount = 0;
+
+        foreach ($data['items'] as $item) {
+            $material = Material::find($item['material_id']);
+            $quantity = (int)$item['quantity'];
+
+            $material->increment('stock', $quantity);
+
+            // Record transaction
+            MaterialStockTransaction::create([
+                'material_id' => $material->id,
+                'user_id' => Auth::id(),
+                'type' => 'in',
+                'quantity' => $quantity,
+                'remarks' => $data['remarks'] ?? null,
+            ]);
+
+            $transactionCount++;
+        }
+
+        return back()->with('status', "Added stock for {$transactionCount} material(s)");
+    }
+
+    /**
+     * Bulk reduce stock for multiple materials in one transaction
+     */
+    public function bulkReduceStock(Request $request)
+    {
+        $data = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.material_id' => 'required|exists:materials,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'remarks' => 'nullable|string|max:500',
+        ]);
+
+        $transactionCount = 0;
+
+        foreach ($data['items'] as $item) {
+            $material = Material::find($item['material_id']);
+            $quantity = (int)$item['quantity'];
+
+            $newStock = max(0, (int) $material->stock - $quantity);
+            $material->update(['stock' => $newStock]);
+
+            // Record transaction
+            MaterialStockTransaction::create([
+                'material_id' => $material->id,
+                'user_id' => Auth::id(),
+                'type' => 'out',
+                'quantity' => $quantity,
+                'remarks' => $data['remarks'] ?? null,
+            ]);
+
+            $transactionCount++;
+        }
+
+        return back()->with('status', "Reduced stock for {$transactionCount} material(s)");
     }
 }
