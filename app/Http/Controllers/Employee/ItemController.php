@@ -46,13 +46,48 @@ class ItemController extends Controller
             ->paginate(15, ['*'], 'hidden_page')
             ->withQueryString();
 
-        // Get recent transactions for history display
-        $recentTransactions = ItemStockTransaction::with(['item', 'user'])
-            ->orderBy('created_at', 'desc')
-            ->limit(30)
-            ->get();
+        // Build transactions query with filters
+        $query = ItemStockTransaction::with(['item', 'user'])
+            ->orderBy('created_at', 'desc');
 
-        return view('employee.items-db', compact('visibleItems', 'hiddenItems', 'search', 'recentTransactions'));
+        // Filter by employee name
+        if ($request->filled('employee_name')) {
+            $query->whereHas('user', function ($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->input('employee_name') . '%');
+            });
+        }
+
+        // Filter by transaction type
+        if ($request->filled('type') && in_array($request->input('type'), ['in', 'out'])) {
+            $query->where('type', $request->input('type'));
+        }
+
+        // Filter by remarks/notes
+        if ($request->filled('remarks')) {
+            $query->where('remarks', 'like', '%' . $request->input('remarks') . '%');
+        }
+
+        // Filter by date range
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->input('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->input('date_to'));
+        }
+
+        // Get filtered transactions (limit to 100 for performance)
+        $recentTransactions = $query->limit(100)->get();
+
+        // Preserve filter values for form
+        $filters = [
+            'employee_name' => $request->input('employee_name', ''),
+            'type' => $request->input('type', ''),
+            'remarks' => $request->input('remarks', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+
+        return view('employee.items-db', compact('visibleItems', 'hiddenItems', 'search', 'recentTransactions', 'filters'));
     }
 
     public function store(Request $request)
@@ -226,7 +261,36 @@ class ItemController extends Controller
             $item->save();
         });
 
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => 'Item stock updated and backorders allocated']);
+        }
         return back()->with('status', 'Item stock updated and backorders allocated');
+    }
+
+    // Reduce stock from item
+    public function reduceStock(Request $request, Item $item)
+    {
+        $data = $request->validate([
+            'quantity' => 'required|integer|min:1',
+            'remarks' => 'nullable|string|max:500',
+        ]);
+
+        $newStock = max(0, (int) $item->stock - (int) $data['quantity']);
+        $item->update(['stock' => $newStock]);
+
+        // Record transaction
+        ItemStockTransaction::create([
+            'item_id' => $item->id,
+            'user_id' => Auth::id(),
+            'type' => 'out',
+            'quantity' => $data['quantity'],
+            'remarks' => $data['remarks'] ?? null,
+        ]);
+
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => 'Item stock reduced']);
+        }
+        return back()->with('status', 'Item stock reduced');
     }
 
     /**
@@ -261,6 +325,9 @@ class ItemController extends Controller
             $transactionCount++;
         }
 
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => "Added stock for {$transactionCount} item(s)"]);
+        }
         return back()->with('status', "Added stock for {$transactionCount} item(s)");
     }
 
@@ -297,6 +364,9 @@ class ItemController extends Controller
             $transactionCount++;
         }
 
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => "Reduced stock for {$transactionCount} item(s)"]);
+        }
         return back()->with('status', "Reduced stock for {$transactionCount} item(s)");
     }
 }

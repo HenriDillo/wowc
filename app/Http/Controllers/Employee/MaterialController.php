@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Auth;
 class MaterialController extends Controller
 {
     // Display visible and hidden materials
-    public function index()
+    public function index(Request $request)
     {
         $materials = Material::where('is_hidden', false)
             ->orderBy('name')
@@ -21,13 +21,48 @@ class MaterialController extends Controller
             ->orderBy('name')
             ->paginate(15);
 
-        // Get recent transactions for history display
-        $recentTransactions = MaterialStockTransaction::with(['material', 'user'])
-            ->orderBy('created_at', 'desc')
-            ->limit(30)
-            ->get();
+        // Build transactions query with filters
+        $query = MaterialStockTransaction::with(['material', 'user'])
+            ->orderBy('created_at', 'desc');
 
-        return view('employee.raw-materials-db', compact('materials', 'hiddenMaterials', 'recentTransactions'));
+        // Filter by employee name
+        if ($request->filled('employee_name')) {
+            $query->whereHas('user', function ($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->input('employee_name') . '%');
+            });
+        }
+
+        // Filter by transaction type
+        if ($request->filled('type') && in_array($request->input('type'), ['in', 'out'])) {
+            $query->where('type', $request->input('type'));
+        }
+
+        // Filter by remarks/notes
+        if ($request->filled('remarks')) {
+            $query->where('remarks', 'like', '%' . $request->input('remarks') . '%');
+        }
+
+        // Filter by date range
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->input('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->input('date_to'));
+        }
+
+        // Get filtered transactions (limit to 100 for performance)
+        $recentTransactions = $query->limit(100)->get();
+
+        // Preserve filter values for form
+        $filters = [
+            'employee_name' => $request->input('employee_name', ''),
+            'type' => $request->input('type', ''),
+            'remarks' => $request->input('remarks', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+
+        return view('employee.raw-materials-db', compact('materials', 'hiddenMaterials', 'recentTransactions', 'filters'));
     }
 
     // Store new material
@@ -168,7 +203,14 @@ class MaterialController extends Controller
             $transactionCount++;
         }
 
-        return back()->with('status', "Added stock for {$transactionCount} material(s)");
+        $message = "Added stock for {$transactionCount} material(s)";
+
+        // Return JSON for AJAX requests, redirect for regular form submissions
+        if ($request->wantsJson()) {
+            return response()->json(['status' => $message], 200);
+        }
+
+        return back()->with('status', $message);
     }
 
     /**
@@ -204,6 +246,13 @@ class MaterialController extends Controller
             $transactionCount++;
         }
 
-        return back()->with('status', "Reduced stock for {$transactionCount} material(s)");
+        $message = "Reduced stock for {$transactionCount} material(s)";
+
+        // Return JSON for AJAX requests, redirect for regular form submissions
+        if ($request->wantsJson()) {
+            return response()->json(['status' => $message], 200);
+        }
+
+        return back()->with('status', $message);
     }
 }

@@ -343,8 +343,104 @@
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm mt-6">
         <div class="flex items-center justify-between px-4 py-3 border-b">
             <h3 class="text-base sm:text-lg font-semibold text-gray-800">📋 Stock Transaction History</h3>
-            <span class="text-sm text-gray-500">Last 30 transactions</span>
+            <span class="text-sm text-gray-500">Last 100 transactions</span>
         </div>
+
+        {{-- Search & Filter Bar --}}
+        <div class="bg-gray-50 border-b p-4">
+            <form method="GET" action="{{ route('employee.raw-materials') }}" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                    {{-- Employee Name Filter --}}
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Employee Name</label>
+                        <input type="text" name="employee_name" placeholder="Search employee..." 
+                            value="{{ $filters['employee_name'] ?? '' }}"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c49b6e]" />
+                    </div>
+
+                    {{-- Transaction Type Filter --}}
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Type</label>
+                        <select name="type" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c49b6e]">
+                            <option value="">All Types</option>
+                            <option value="in" @selected(($filters['type'] ?? '') === 'in')>Stock In</option>
+                            <option value="out" @selected(($filters['type'] ?? '') === 'out')>Stock Out</option>
+                        </select>
+                    </div>
+
+                    {{-- Date From Filter --}}
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">From Date</label>
+                        <input type="date" name="date_from" 
+                            value="{{ $filters['date_from'] ?? '' }}"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c49b6e]" />
+                    </div>
+
+                    {{-- Date To Filter --}}
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">To Date</label>
+                        <input type="date" name="date_to" 
+                            value="{{ $filters['date_to'] ?? '' }}"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c49b6e]" />
+                    </div>
+
+                    {{-- Remarks/Notes Filter --}}
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Remarks</label>
+                        <input type="text" name="remarks" placeholder="Search notes..." 
+                            value="{{ $filters['remarks'] ?? '' }}"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c49b6e]" />
+                    </div>
+                </div>
+
+                {{-- Filter Actions --}}
+                <div class="flex items-center gap-2 justify-end">
+                    <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-[#c49b6e] hover:bg-[#b08a5c] transition-colors">
+                        🔍 Search
+                    </button>
+                    @if(request()->filled('employee_name') || request()->filled('type') || request()->filled('remarks') || request()->filled('date_from') || request()->filled('date_to'))
+                        <a href="{{ route('employee.raw-materials') }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 font-medium transition-colors">
+                            ✕ Clear Filters
+                        </a>
+                    @endif
+                </div>
+
+                {{-- Active Filters Display --}}
+                @if(request()->filled('employee_name') || request()->filled('type') || request()->filled('remarks') || request()->filled('date_from') || request()->filled('date_to'))
+                    <div class="pt-2 border-t border-gray-200">
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <span class="text-xs font-semibold text-gray-600">Active Filters:</span>
+                            @if(request()->filled('employee_name'))
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium">
+                                    👤 Employee: {{ request('employee_name') }}
+                                </span>
+                            @endif
+                            @if(request()->filled('type'))
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-medium">
+                                    {{ request('type') === 'in' ? '📥 Stock In' : '📤 Stock Out' }}
+                                </span>
+                            @endif
+                            @if(request()->filled('date_from'))
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">
+                                    📅 From: {{ \Carbon\Carbon::parse(request('date_from'))->format('M d, Y') }}
+                                </span>
+                            @endif
+                            @if(request()->filled('date_to'))
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">
+                                    📅 To: {{ \Carbon\Carbon::parse(request('date_to'))->format('M d, Y') }}
+                                </span>
+                            @endif
+                            @if(request()->filled('remarks'))
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium">
+                                    📝 Notes: {{ request('remarks') }}
+                                </span>
+                            @endif
+                        </div>
+                    </div>
+                @endif
+            </form>
+        </div>
+
         @if($recentTransactions->count() > 0)
             <div class="overflow-x-auto">
                 <table class="w-full border-collapse">
@@ -382,7 +478,7 @@
             </div>
         @else
             <div class="p-6 text-center text-gray-500">
-                <p>No transactions yet. Start managing stock to see transaction history.</p>
+                <p>@if(request()->filled('employee_name') || request()->filled('type') || request()->filled('remarks') || request()->filled('date_from') || request()->filled('date_to'))No transactions match your filter criteria.@else No transactions yet. Start managing stock to see transaction history.@endif</p>
             </div>
         @endif
     </div>
