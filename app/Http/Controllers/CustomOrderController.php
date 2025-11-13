@@ -48,6 +48,7 @@ class CustomOrderController extends Controller
             'order_type' => Order::TYPE_CUSTOM,
             'status' => Order::STATUS_PENDING,
             'total_amount' => 0, // Will be set after review
+            'payment_status' => 'unpaid',
         ]);
 
         // Create custom order

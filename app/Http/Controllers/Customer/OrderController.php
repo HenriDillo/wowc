@@ -11,10 +11,11 @@ class OrderController extends Controller
     public function index()
     {
         $user = Auth::user();
-		$orders = Order::with('items.item.photos')
+		$orders = Order::with('items.item.photos', 'childOrders')
 			->select('orders.*') // ensure unique orders even if future joins/filters are added
 			->distinct()
             ->where('user_id', $user->id)
+            ->whereNull('parent_order_id') // Only fetch parent or standalone orders
             ->latest()
             ->paginate(12)
             ->withQueryString();

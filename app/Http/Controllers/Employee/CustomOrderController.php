@@ -73,6 +73,9 @@ class CustomOrderController extends Controller
 			// Awaiting customer payment
 			$customOrder->order->status = Order::STATUS_PENDING;
 			$customOrder->order->total_amount = $customOrder->price_estimate ?? $customOrder->order->total_amount;
+			$customOrder->order->required_payment_amount = ($customOrder->price_estimate ?? $customOrder->order->total_amount) * 0.5;
+			$customOrder->order->remaining_balance = ($customOrder->price_estimate ?? $customOrder->order->total_amount) * 0.5;
+			$customOrder->order->payment_status = 'unpaid';
 			$customOrder->order->save();
 		}
 

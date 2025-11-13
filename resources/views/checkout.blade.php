@@ -52,10 +52,31 @@
                             <input name="phone_number" value="{{ old('phone_number', $addr->phone_number ?? '') }}" placeholder="Phone Number" class="sm:col-span-2 rounded-md border-gray-300" required>
                         </div>
 
-						<h3 class="mt-6 text-lg font-semibold text-gray-900">Payment</h3>
-                        <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
-                            <p class="text-sm text-blue-800"><strong>Important:</strong> Payment is required to complete your order. Please select a payment method below.</p>
-                        </div>
+                        <h3 class="mt-6 text-lg font-semibold text-gray-900">Payment</h3>
+                        @php
+                            $paymentPercentage = $paymentPercentage ?? 1.0;
+                            $requiredPaymentAmount = $requiredPaymentAmount ?? $total;
+                            $isPartialPayment = $paymentPercentage < 1.0;
+                            $orderType = isset($payOrder) && $payOrder ? ($payOrder->order_type ?? 'custom') : 'standard';
+                            $isBackOrderOrCustom = $orderType === 'backorder' || $orderType === 'custom';
+                        @endphp
+                        
+                        @if($isBackOrderOrCustom)
+                            <div class="mt-3 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg mb-4">
+                                <div class="flex items-start gap-3">
+                                    <span class="text-2xl">💰</span>
+                                    <div>
+                                        <p class="font-bold text-amber-900">Down Payment Required (50%)</p>
+                                        <p class="text-sm text-amber-800 mt-1">This is a {{ $orderType === 'backorder' ? 'Back Order' : 'Custom Order' }}. You must pay <strong>50% upfront</strong> now to proceed. The remaining 50% will be due when the order is ready.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        @else
+                            <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                                <p class="text-sm text-blue-800"><strong>Important:</strong> Payment is required to complete your order. Please select a payment method below.</p>
+                            </div>
+                        @endif
+                        
                         <div class="mt-3 grid grid-cols-2 gap-3">
 							<label class="flex items-center justify-center gap-2 border rounded-md p-3 cursor-pointer hover:border-gray-400">
                                 <input type="radio" name="payment_method" value="Bank" x-model="method" class="hidden">
@@ -66,9 +87,7 @@
 								<img src="/images/gcash.png" alt="GCash" class="h-5">
 								<span class="text-sm">GCash</span>
 							</label>
-						</div>
-
-						<div class="mt-6 text-right">
+						</div>						<div class="mt-6 text-right">
 							<button id="completeBtn" type="button" class="inline-flex items-center justify-center px-6 py-3 rounded-md text-white font-medium shadow-sm hover:shadow transition" style="background:#c59d5f;">Complete Order</button>
 						</div>
 					</form>
@@ -79,74 +98,144 @@
 					<h2 class="text-lg font-semibold text-gray-900">Order Summary</h2>
                         @php
 							$paymentOnly = isset($payOrder) && $payOrder;
-                            // Use the cart line's is_backorder flag to separate standard vs backorder
-                            $standardItems = $paymentOnly ? collect() : $cartItems->filter(fn($ci) => !($ci->is_backorder ?? false));
-                            $backOrderItems = $paymentOnly ? collect() : $cartItems->filter(fn($ci) => ($ci->is_backorder ?? false));
-                            $standardTotal = $paymentOnly ? 0 : $standardItems->sum('subtotal');
-                            $backOrderTotal = $paymentOnly ? 0 : $backOrderItems->sum('subtotal');
+                            $isMixedOrder = isset($isMixedOrder) && $isMixedOrder;
+                            $standardItems = $standardItems ?? collect();
+                            $backorderItems = $backorderItems ?? collect();
+                            $standardSubtotal = $standardSubtotal ?? 0;
+                            $backorderSubtotal = $backorderSubtotal ?? 0;
+                            $requiredPaymentAmount = $requiredPaymentAmount ?? $total;
                         @endphp
 
-                        <!-- Standard Items -->
-                        @if(!$paymentOnly && $standardItems->isNotEmpty())
-                            <div class="mt-4">
-                                <h3 class="text-sm font-medium text-gray-900">Standard Items</h3>
-                                <div class="mt-3 space-y-4">
-                                    @foreach($standardItems as $ci)
-                                        <div class="flex items-center justify-between gap-4">
-                                            <div class="flex items-center gap-3">
-                                                <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
-                                                    <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
-                                                </div>
-                                                <div>
-                                                    <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
-                                                    <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
-                                                </div>
-                                            </div>
-                                            <div class="text-right">
-                                                <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
-                                            </div>
-                                        </div>
-                                    @endforeach
-                                </div>
-                                @if($backOrderItems->isNotEmpty())
-                                    <p class="mt-2 text-sm text-gray-700">Standard items subtotal: ₱{{ number_format($standardTotal, 2) }}</p>
-                                @endif
-                            </div>
-                        @endif
-
-                        <!-- Back Order Items -->
-                        @if(!$paymentOnly && $backOrderItems->isNotEmpty())
-                            <div class="mt-6">
-                                <div class="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                                    <h3 class="text-sm font-medium text-blue-800">Back Order Items</h3>
-                                    <p class="mt-1 text-xs text-blue-700">These items will be shipped separately once they're back in stock.</p>
-                                </div>
-                                <div class="space-y-4">
-                                    @foreach($backOrderItems as $ci)
-                                        <div class="flex items-center justify-between gap-4">
-                                            <div class="flex items-center gap-3">
-                                                <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
-                                                    <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
-                                                </div>
-                                                <div>
-                                                    <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
-                                                    <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
-                                                    <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] rounded bg-blue-100 text-blue-800">Back-Order</span>
-                                                    @if($ci->item->restock_date)
-                                                        <span class="block text-[11px] text-blue-700">Ships after {{ $ci->item->restock_date->format('M d, Y') }}</span>
-                                                    @endif
-                                                </div>
-                                            </div>
-                                            <div class="text-right">
-                                                <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
-                                            </div>
-                                        </div>
-                                    @endforeach
-                                </div>
+                        @if($isMixedOrder)
+                            <!-- Mixed Order Breakdown -->
+                            <div class="mt-4 space-y-4">
+                                <!-- Standard Items -->
                                 @if($standardItems->isNotEmpty())
-                                    <p class="mt-2 text-sm text-gray-700">Back order items subtotal: ₱{{ number_format($backOrderTotal, 2) }}</p>
+                                    <div>
+                                        <h3 class="text-sm font-medium text-gray-900">Standard Items (100% Due)</h3>
+                                        <div class="mt-3 space-y-4">
+                                            @foreach($standardItems as $ci)
+                                                <div class="flex items-center justify-between gap-4">
+                                                    <div class="flex items-center gap-3">
+                                                        <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
+                                                            <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
+                                                        </div>
+                                                        <div>
+                                                            <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
+                                                            <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-right">
+                                                        <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                        <p class="mt-2 text-sm text-gray-700 font-medium">Standard subtotal: ₱{{ number_format($standardSubtotal, 2) }}</p>
+                                    </div>
+                                @endif
+
+                                <!-- Back Order Items -->
+                                @if($backorderItems->isNotEmpty())
+                                    <div class="mt-6">
+                                        <div class="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                            <h3 class="text-sm font-medium text-blue-800">Back Order Items (50% Due Now)</h3>
+                                            <p class="mt-1 text-xs text-blue-700">These items are on back order. Pay 50% now, 50% when restocked.</p>
+                                        </div>
+                                        <div class="space-y-4">
+                                            @foreach($backorderItems as $ci)
+                                                <div class="flex items-center justify-between gap-4">
+                                                    <div class="flex items-center gap-3">
+                                                        <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
+                                                            <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
+                                                        </div>
+                                                        <div>
+                                                            <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
+                                                            <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
+                                                            <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] rounded bg-blue-100 text-blue-800">Back-Order</span>
+                                                            @if($ci->item->restock_date)
+                                                                <span class="block text-[11px] text-blue-700">Ships after {{ $ci->item->restock_date->format('M d, Y') }}</span>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-right">
+                                                        <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
+                                                        <p class="text-xs text-blue-600 font-medium">Pay now: ₱{{ number_format($ci->subtotal * 0.5, 2) }}</p>
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                        <p class="mt-2 text-sm text-gray-700 font-medium">Back order subtotal: ₱{{ number_format($backorderSubtotal, 2) }}</p>
+                                        <p class="mt-1 text-sm text-blue-700">50% Down: ₱{{ number_format($backorderSubtotal * 0.5, 2) }} | Remaining: ₱{{ number_format($backorderSubtotal * 0.5, 2) }}</p>
+                                    </div>
                                 @endif
                             </div>
+                        @elseif(!$paymentOnly)
+                            <!-- Non-Mixed Order Display (use existing variable names) -->
+                            @php
+                                $nonMixedStdItems = $cartItems->filter(fn($ci) => !($ci->is_backorder ?? false));
+                                $nonMixedBackItems = $cartItems->filter(fn($ci) => ($ci->is_backorder ?? false));
+                            @endphp
+                            @if($nonMixedStdItems->isNotEmpty())
+                                <div class="mt-4">
+                                    <h3 class="text-sm font-medium text-gray-900">Standard Items</h3>
+                                    <div class="mt-3 space-y-4">
+                                        @foreach($nonMixedStdItems as $ci)
+                                            <div class="flex items-center justify-between gap-4">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
+                                                        <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
+                                                    </div>
+                                                    <div>
+                                                        <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
+                                                        <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
+                                                    </div>
+                                                </div>
+                                                <div class="text-right">
+                                                    <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    @if($nonMixedBackItems->isNotEmpty())
+                                        <p class="mt-2 text-sm text-gray-700">Standard items subtotal: ₱{{ number_format($nonMixedStdItems->sum('subtotal'), 2) }}</p>
+                                    @endif
+                                </div>
+                            @endif
+
+                            @if($nonMixedBackItems->isNotEmpty())
+                                <div class="mt-6">
+                                    <div class="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                        <h3 class="text-sm font-medium text-blue-800">Back Order Items</h3>
+                                        <p class="mt-1 text-xs text-blue-700">These items will be shipped separately once they're back in stock.</p>
+                                    </div>
+                                    <div class="space-y-4">
+                                        @foreach($nonMixedBackItems as $ci)
+                                            <div class="flex items-center justify-between gap-4">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-16 h-16 rounded bg-gray-100 overflow-hidden">
+                                                        <img src="{{ optional($ci->item->photos->first())->url }}" alt="" class="w-full h-full object-cover"/>
+                                                    </div>
+                                                    <div>
+                                                        <p class="text-sm font-medium text-gray-900">{{ $ci->item->name }}</p>
+                                                        <p class="text-xs text-gray-500">Qty: {{ $ci->quantity }}</p>
+                                                        <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] rounded bg-blue-100 text-blue-800">Back-Order</span>
+                                                        @if($ci->item->restock_date)
+                                                            <span class="block text-[11px] text-blue-700">Ships after {{ $ci->item->restock_date->format('M d, Y') }}</span>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                                <div class="text-right">
+                                                    <p class="text-sm text-gray-900">₱{{ number_format($ci->subtotal, 2) }}</p>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    @if($nonMixedStdItems->isNotEmpty())
+                                        <p class="mt-2 text-sm text-gray-700">Back order items subtotal: ₱{{ number_format($nonMixedBackItems->sum('subtotal'), 2) }}</p>
+                                    @endif
+                                </div>
+                            @endif
                         @endif
                         </div>
 
@@ -172,11 +261,50 @@
 								</div>
 							</div>
 						@endif
-						<div class="flex items-center justify-between"><span class="text-gray-600">Subtotal</span><span>₱{{ number_format($total, 2) }}</span></div>
+						<div class="flex items-center justify-between"><span class="text-gray-600">Subtotal</span><span>₱{{ number_format($subtotal, 2) }}</span></div>
 						@if(!$paymentOnly)
 							<div class="flex items-center justify-between"><span class="text-gray-600">Shipping</span><span>₱{{ number_format($shipping, 2) }}</span></div>
 						@endif
-						<div class="flex items-center justify-between font-semibold text-gray-900"><span>Total</span><span>₱{{ number_format($total, 2) }}</span></div>
+                        
+                        @php
+                            $displayAmount = $requiredPaymentAmount ?? $total;
+                        @endphp
+                        
+                        @if($isMixedOrder)
+                            <div class="mt-3 space-y-2 border-t pt-3">
+                                <h3 class="font-semibold text-gray-900">Payment Breakdown</h3>
+                                <div class="flex items-center justify-between p-2 bg-green-50 rounded border border-green-200">
+                                    <span class="text-green-900">Standard Items (100%)</span>
+                                    <span class="font-semibold text-green-900">₱{{ number_format($standardSubtotal, 2) }}</span>
+                                </div>
+                                <div class="flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-200">
+                                    <span class="text-blue-900">Back Order (50% Down)</span>
+                                    <span class="font-semibold text-blue-900">₱{{ number_format($backorderSubtotal * 0.5, 2) }}</span>
+                                </div>
+                                <div class="flex items-center justify-between p-3 bg-amber-50 rounded border-2 border-amber-300 mt-2">
+                                    <span class="font-bold text-amber-900">💰 Total Due Now</span>
+                                    <span class="font-bold text-lg text-amber-900">₱{{ number_format($requiredPaymentAmount, 2) }}</span>
+                                </div>
+                                <p class="text-xs text-gray-600 italic">Remaining: ₱{{ number_format($backorderSubtotal * 0.5, 2) }} (due when back order items arrive)</p>
+                            </div>
+                        @elseif(($cartItems->contains(fn($ci) => ($ci->is_backorder ?? false)) && !$paymentOnly) || ($paymentOnly && ($payOrder->order_type === 'backorder' || $payOrder->order_type === 'custom')))
+                            <div class="mt-3 space-y-2 border-t pt-3">
+                                @if(!$paymentOnly)
+                                    <h3 class="font-semibold text-gray-900">Payment Required (50% Down Payment)</h3>
+                                @endif
+                                <div class="flex items-center justify-between p-3 bg-amber-50 rounded border-2 border-amber-300">
+                                    <span class="font-bold text-amber-900">💰 Down Payment Due Now</span>
+                                    <span class="font-bold text-lg text-amber-900">₱{{ number_format($displayAmount, 2) }}</span>
+                                </div>
+                                <p class="text-xs text-gray-600 italic">Remaining 50% (₱{{ number_format(($total - $displayAmount), 2) }}) will be due upon completion/arrival</p>
+                            </div>
+                        @else
+                            <div class="flex items-center justify-between font-semibold text-gray-900 p-3 bg-gray-100 rounded border border-gray-300 mt-3">
+                                <span>Total Amount Due</span>
+                                <span>₱{{ number_format($displayAmount, 2) }}</span>
+                            </div>
+                        @endif
+                        
 						<p class="text-xs text-gray-500 mt-2">Tax and shipping cost will be calculated later.</p>
                         @if(!$paymentOnly && $cartItems->contains(fn($ci) => ($ci->is_backorder ?? false)))
                             <p class="text-xs text-blue-700 mt-1">This item is on back order. We'll ship it once restocked.</p>
@@ -236,9 +364,12 @@ const completeBtn = document.getElementById('completeBtn');
 const form = document.querySelector('form[action="{{ route('checkout.store') }}"]');
 const gcashModal = document.getElementById('gcashModal');
 const bankModal = document.getElementById('bankModal');
-// If paying an existing order, expose IDs for JS
+
+// Payment tracking
 window.payOrderId = {{ isset($payOrder) && $payOrder ? $payOrder->id : 'null' }};
 window.payAmount = {{ isset($payOrder) && $payOrder ? (float) $payOrder->total_amount : 0 }};
+window.requiredPaymentAmount = {{ $requiredPaymentAmount ?? 0 }};
+window.isMixedOrder = {{ isset($isMixedOrder) && $isMixedOrder ? 'true' : 'false' }};
 
 function openModal(id){ const el = document.getElementById(id); el.classList.remove('hidden'); el.classList.add('flex'); }
 function closeModal(id){ const el = document.getElementById(id); el.classList.add('hidden'); el.classList.remove('flex'); }
@@ -246,7 +377,7 @@ function closeModal(id){ const el = document.getElementById(id); el.classList.ad
 async function createOrder() {
 	// If this is payment-only for an existing order, skip order creation
 	if(window.payOrderId){
-		return { success: true, order_id: window.payOrderId, total: window.payAmount };
+		return { success: true, order_id: window.payOrderId, total: window.payAmount, required: window.requiredPaymentAmount };
 	}
 	const data = new FormData(form);
 	const res = await fetch(form.action, { 
@@ -298,7 +429,8 @@ document.getElementById('gcashConfirmBtn').addEventListener('click', async () =>
 	if(ref.length < 6){ err.textContent = 'Reference number must be at least 6 characters.'; err.classList.remove('hidden'); return; }
 	try{
 		const o = await createOrder();
-		const params = new URLSearchParams({ order_id: o.order_id, amount: o.total, reference: ref });
+		const requiredAmount = o.required ?? o.total;
+		const params = new URLSearchParams({ order_id: o.order_id, amount: requiredAmount, reference: ref });
 		const res = await fetch('{{ route('payments.gcash') }}', { method:'POST', headers:{ 'X-CSRF-TOKEN': csrf }, body: params });
 		if(!res.ok) {
 			const errData = await res.json().catch(() => ({}));
@@ -320,9 +452,10 @@ document.getElementById('bankSubmitBtn').addEventListener('click', async () => {
 	if(!file){ err.textContent = 'Please upload an image of the deposit slip.'; err.classList.remove('hidden'); return; }
 	try{
 		const o = await createOrder();
+		const requiredAmount = o.required ?? o.total;
 		const fd = new FormData();
 		fd.append('order_id', o.order_id);
-		fd.append('amount', o.total);
+		fd.append('amount', requiredAmount);
 		fd.append('proof', file);
 		const res = await fetch('{{ route('payments.bank') }}', { method:'POST', headers:{ 'X-CSRF-TOKEN': csrf }, body: fd });
 		if(!res.ok) {

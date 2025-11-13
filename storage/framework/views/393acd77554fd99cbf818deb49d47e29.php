@@ -62,13 +62,91 @@
         <?php endif; ?>
 
 		<?php
-			$standardOrders = $orders->filter(fn($o) => ($o->order_type ?? '') === 'standard');
-			$backOrdersOrders = $orders->filter(fn($o) => ($o->order_type ?? '') === 'backorder');
+			// Separate parent orders (mixed orders) from regular orders
+			$parentOrders = $orders->filter(fn($o) => ($o->order_type ?? '') === 'mixed' && !$o->parent_order_id);
+			$regularOrders = $orders->filter(fn($o) => ($o->order_type ?? '') !== 'mixed' && !$o->parent_order_id);
+			$standardOrders = $regularOrders->filter(fn($o) => ($o->order_type ?? '') === 'standard');
+			$backOrdersOrders = $regularOrders->filter(fn($o) => ($o->order_type ?? '') === 'backorder');
+			
 			$firstPhoto = function($order){
 				$firstItem = optional($order->items)->first();
 				return optional(optional($firstItem)->item?->photos?->first())->url;
 			};
+			
+			$getStatusColor = function($status) {
+				return match($status) {
+					'pending' => 'bg-yellow-100 text-yellow-800',
+					'processing', 'ready_to_ship', 'ready_for_delivery' => 'bg-blue-100 text-blue-800',
+					'shipped', 'in_production' => 'bg-indigo-100 text-indigo-800',
+					'delivered', 'completed' => 'bg-green-100 text-green-800',
+					'cancelled' => 'bg-red-100 text-red-800',
+					'backorder' => 'bg-orange-100 text-orange-800',
+					default => 'bg-gray-100 text-gray-800',
+				};
+			};
 		?>
+
+		<!-- Mixed Orders (Parent Orders) Section -->
+		<?php if($parentOrders->isNotEmpty()): ?>
+			<div class="mb-6 bg-white border border-purple-100 rounded-xl shadow-sm p-4">
+				<h2 class="text-lg font-medium text-gray-900">Your Mixed Orders</h2>
+				<p class="text-sm text-purple-700 mt-1">Orders containing both standard and back order items.</p>
+				<div class="mt-3 divide-y">
+					<?php $__currentLoopData = $parentOrders; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $parentOrder): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+						<div class="py-4">
+							<!-- Parent Order Header -->
+							<div class="flex items-center justify-between mb-3">
+								<div class="flex items-center gap-3 flex-1">
+									<?php if($firstPhoto($parentOrder)): ?>
+										<img src="<?php echo e($firstPhoto($parentOrder)); ?>" class="w-12 h-12 rounded object-cover bg-gray-100"/>
+									<?php else: ?>
+										<div class="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-gray-400">
+											<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+											</svg>
+										</div>
+									<?php endif; ?>
+									<div class="flex-1">
+										<div class="font-medium text-gray-900">Mixed Order #<?php echo e($parentOrder->id); ?></div>
+										<div class="text-xs text-gray-500">Placed: <?php echo e($parentOrder->created_at?->format('M d, Y')); ?></div>
+										<div class="text-xs text-purple-700 font-medium">Total: ₱<?php echo e(number_format($parentOrder->total_amount, 2)); ?> • Payment: <?php echo e($parentOrder->getPaymentStatusLabel()); ?></div>
+									</div>
+								</div>
+								<div class="flex flex-col items-end gap-2">
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?php echo e($getStatusColor($parentOrder->status)); ?>">
+										<?php echo e(ucfirst($parentOrder->status)); ?>
+
+									</span>
+									<a href="<?php echo e(route('customer.orders.show', $parentOrder->id)); ?>" class="text-xs text-purple-700 hover:underline">View Details</a>
+								</div>
+							</div>
+							
+							<!-- Child Orders (Sub-Orders) -->
+							<?php $childOrders = $parentOrder->childOrders; ?>
+							<?php if($childOrders->isNotEmpty()): ?>
+								<div class="ml-4 border-l-2 border-purple-200 pl-4 space-y-2">
+									<?php $__currentLoopData = $childOrders; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $childOrder): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+										<div class="py-2 flex items-center justify-between bg-purple-50 px-3 rounded">
+											<div class="flex-1">
+												<div class="text-sm font-medium text-gray-900">
+													<?php echo e(ucfirst($childOrder->order_type)); ?> Sub-Order #<?php echo e($childOrder->id); ?>
+
+												</div>
+												<div class="text-xs text-gray-600">
+													Amount: ₱<?php echo e(number_format($childOrder->total_amount, 2)); ?> • Status: <?php echo e(ucfirst($childOrder->status)); ?>
+
+												</div>
+											</div>
+											<a href="<?php echo e(route('customer.orders.show', $childOrder->id)); ?>" class="text-xs text-purple-600 hover:underline">View</a>
+										</div>
+									<?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+								</div>
+							<?php endif; ?>
+						</div>
+					<?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+				</div>
+			</div>
+		<?php endif; ?>
 
 		<?php if($standardOrders->isNotEmpty()): ?>
 			<div class="mb-6 bg-white border border-gray-100 rounded-xl shadow-sm p-4">
@@ -139,7 +217,7 @@
 			</div>
 		<?php endif; ?>
 
-		<?php if($standardOrders->isEmpty() && $backOrdersOrders->isEmpty() && (empty($customOrders) || $customOrders->isEmpty())): ?>
+		<?php if($parentOrders->isEmpty() && $standardOrders->isEmpty() && $backOrdersOrders->isEmpty() && (empty($customOrders) || $customOrders->isEmpty())): ?>
 			<div class="px-4 py-6 bg-white border border-gray-100 rounded-xl shadow-sm text-center text-gray-500">No orders yet.</div>
 		<?php endif; ?>
     </section>

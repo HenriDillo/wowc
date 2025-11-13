@@ -15,9 +15,12 @@ class Order extends Model
 
     protected $fillable = [
         'user_id',
+        'parent_order_id',
         'order_type',
         'status',
         'total_amount',
+        'required_payment_amount',
+        'remaining_balance',
         'payment_method',
         'payment_status',
         'back_order_status',
@@ -29,6 +32,8 @@ class Order extends Model
 
     protected $casts = [
         'total_amount' => 'decimal:2',
+        'required_payment_amount' => 'decimal:2',
+        'remaining_balance' => 'decimal:2',
         'expected_restock_date' => 'date',
         'delivered_at' => 'datetime',
     ];
@@ -47,6 +52,7 @@ class Order extends Model
     const TYPE_STANDARD = 'standard';
     const TYPE_BACKORDER = 'backorder';
     const TYPE_CUSTOM = 'custom';
+    const TYPE_MIXED = 'mixed';
 
     public static function getValidOrderTypes(): array
     {
@@ -60,6 +66,16 @@ class Order extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function parentOrder(): BelongsTo
+    {
+        return $this->belongsTo(Order::class, 'parent_order_id');
+    }
+
+    public function childOrders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'parent_order_id');
     }
 
     public function items(): HasMany
@@ -88,9 +104,69 @@ class Order extends Model
         return $this->hasMany(CustomOrder::class);
     }
 
-	public function payments(): HasMany
+    public function payments(): HasMany
 	{
 		return $this->hasMany(Payment::class);
+	}
+
+	/**
+	 * Determine the payment percentage required based on order type
+	 * Standard orders: 100%, Back Orders & Custom Orders: 50%
+	 */
+	public function getRequiredPaymentPercentage(): float
+	{
+		if ($this->order_type === self::TYPE_BACKORDER || $this->order_type === self::TYPE_CUSTOM) {
+			return 0.5; // 50% down payment
+		}
+		return 1.0; // 100% for standard orders
+	}
+
+	/**
+	 * Calculate the amount customer must pay at checkout
+	 */
+	public function calculateRequiredPaymentAmount(): float
+	{
+		$percentage = $this->getRequiredPaymentPercentage();
+		return (float) ($this->total_amount * $percentage);
+	}
+
+	/**
+	 * Get the remaining balance after a partial payment
+	 */
+	public function getRemainingBalance(): float
+	{
+		$requiredAmount = $this->calculateRequiredPaymentAmount();
+		$paidAmount = (float) $this->payments()->where('status', 'paid')->sum('amount');
+		return max(0, $requiredAmount - $paidAmount);
+	}
+
+	/**
+	 * Check if the order is fully paid
+	 */
+	public function isFullyPaid(): bool
+	{
+		return $this->payment_status === 'paid';
+	}
+
+	/**
+	 * Check if the order is partially paid (for backorder/custom orders)
+	 */
+	public function isPartiallyPaid(): bool
+	{
+		return $this->payment_status === 'partially_paid';
+	}
+
+	/**
+	 * Get payment status label for display
+	 */
+	public function getPaymentStatusLabel(): string
+	{
+		return match($this->payment_status) {
+			'paid' => 'Fully Paid ✓',
+			'partially_paid' => 'Partially Paid',
+			'pending_verification' => 'Pending Verification',
+			default => 'Unpaid',
+		};
 	}
 }
 

@@ -36,18 +36,49 @@ class CheckoutController extends Controller
             ->first();
 
 		$items = collect();
+        $standardItems = collect();
+        $backorderItems = collect();
+        $standardSubtotal = 0.0;
+        $backorderSubtotal = 0.0;
         $subtotal = 0.0;
+        $isMixedOrder = false;
+        $requiredPaymentAmount = 0.0;
+        
 		if ($cart && !$payOrder) {
             $items = CartItem::with('item.photos')->where('cart_id', $cart->id)->get();
-            $subtotal = (float) $items->sum('subtotal');
+            
+            // Separate standard and backorder items
+            $standardItems = $items->filter(fn($ci) => !($ci->is_backorder ?? false) && !optional($ci->item)->isBackorder());
+            $backorderItems = $items->filter(fn($ci) => ($ci->is_backorder ?? false) || optional($ci->item)->isBackorder());
+            
+            $standardSubtotal = (float) $standardItems->sum('subtotal');
+            $backorderSubtotal = (float) $backorderItems->sum('subtotal');
+            $subtotal = $standardSubtotal + $backorderSubtotal;
+            
+            // Check if this is a mixed order
+            $isMixedOrder = $standardItems->isNotEmpty() && $backorderItems->isNotEmpty();
+            
+            // Calculate required payment: 100% of standard + 50% of backorder
+            $requiredPaymentAmount = $standardSubtotal + ($backorderSubtotal * 0.5);
+            
+        } elseif ($payOrder) {
+            // For existing orders (custom order payment)
+            $subtotal = (float) $payOrder->total_amount;
+            $requiredPaymentAmount = $payOrder->calculateRequiredPaymentAmount();
         }
 
 		return view('checkout', [
             'user' => $user,
             'cartItems' => $items,
+            'standardItems' => $standardItems,
+            'backorderItems' => $backorderItems,
+            'standardSubtotal' => $standardSubtotal,
+            'backorderSubtotal' => $backorderSubtotal,
             'subtotal' => $subtotal,
             'shipping' => 0.0,
 			'total' => $payOrder ? (float) $payOrder->total_amount : $subtotal,
+            'isMixedOrder' => $isMixedOrder,
+            'requiredPaymentAmount' => $requiredPaymentAmount,
 			'payOrder' => $payOrder,
         ]);
     }
@@ -55,7 +86,7 @@ class CheckoutController extends Controller
     public function store(Request $request)
     {
         $user = Auth::user();
-		$validated = $request->validate([
+        $validated = $request->validate([
             'first_name' => 'required|string|max:120',
             'last_name' => 'required|string|max:120',
             'address_line' => 'required|string|max:255',
@@ -63,7 +94,8 @@ class CheckoutController extends Controller
             'postal_code' => 'required|string|max:20',
             'province' => 'required|string|max:120',
             'phone_number' => 'required|string|max:30',
-			'payment_method' => 'required|in:GCash,Bank',
+            // Accept common variants for bank transfer method to remain compatible with frontend values
+            'payment_method' => 'required|in:GCash,Bank,Bank Transfer',
 			'order_type' => 'nullable|in:standard,backorder',
         ]);
 
@@ -87,132 +119,159 @@ class CheckoutController extends Controller
                 $tax = 0.0; // extend later if tax rules apply
                 $total = $subtotal + $tax;
 
-                // Determine order type based on items or given input
-                $inferredType = 'standard';
-                $hasBack = false;
-                foreach ($cartItems as $ci) {
-                    // If the cart line is already marked as backorder, respect that; otherwise fall back to item's backorder flag
-                    $hasBack = $hasBack || (bool) ($ci->is_backorder ?? $ci->item->isBackorder());
+                // Separate standard and backorder items
+                $standardItems = $cartItems->filter(fn($ci) => !($ci->is_backorder ?? false) && !($ci->item->isBackorder() ?? false));
+                $backorderItems = $cartItems->filter(fn($ci) => ($ci->is_backorder ?? false) || ($ci->item->isBackorder() ?? false));
+                
+                $standardSubtotal = (float) $standardItems->sum('subtotal');
+                $backorderSubtotal = (float) $backorderItems->sum('subtotal');
+                
+                // Check if this is a mixed order
+                $isMixedOrder = $standardItems->isNotEmpty() && $backorderItems->isNotEmpty();
+
+                // Create parent order if mixed, or single order if not
+                $parentOrder = null;
+                if ($isMixedOrder) {
+                    $parentOrder = Order::create([
+                        'user_id' => $user?->id,
+                        'order_type' => 'mixed',
+                        'status' => 'pending',
+                        'total_amount' => $total,
+                        'required_payment_amount' => $standardSubtotal + ($backorderSubtotal * 0.5),
+                        'remaining_balance' => $backorderSubtotal * 0.5,
+                        'payment_method' => null,
+                        'payment_status' => 'unpaid',
+                    ]);
                 }
-				if ($hasBack) {
-                    $inferredType = 'backorder';
+
+                // Create standard order
+                $standardOrder = null;
+                if ($standardItems->isNotEmpty()) {
+                    $standardOrder = Order::create([
+                        'user_id' => $user?->id,
+                        'parent_order_id' => $isMixedOrder ? $parentOrder->id : null,
+                        'order_type' => 'standard',
+                        'status' => 'pending',
+                        'total_amount' => $standardSubtotal,
+                        'required_payment_amount' => $standardSubtotal,
+                        'remaining_balance' => 0,
+                        'payment_method' => null,
+                        'payment_status' => 'unpaid',
+                    ]);
+
+                    // Add standard items to standard order
+                    foreach ($standardItems as $ci) {
+                        $item = Item::lockForUpdate()->find($ci->item_id);
+                        if (!$item) {
+                            throw new \RuntimeException('Item not found');
+                        }
+
+                        $requestedQty = (int) $ci->quantity;
+                        $available = (int) max(0, $item->stock ?? 0);
+
+                        if ($available >= $requestedQty) {
+                            $item->stock = $available - $requestedQty;
+                            $item->save();
+
+                            ItemStockTransaction::create([
+                                'item_id' => $item->id,
+                                'user_id' => $user?->id,
+                                'type' => 'out',
+                                'quantity' => $requestedQty,
+                                'remarks' => "Order #{$standardOrder->id} - Customer order fulfillment",
+                            ]);
+
+                            OrderItem::create([
+                                'order_id' => $standardOrder->id,
+                                'item_id' => $item->id,
+                                'quantity' => $requestedQty,
+                                'price' => $ci->price,
+                                'subtotal' => $ci->subtotal,
+                                'is_backorder' => false,
+                                'backorder_status' => null,
+                            ]);
+                        } else if ($available > 0) {
+                            // Partial stock available - fulfill what we can for standard order
+                            $fulfilledQty = $available;
+                            $fulfilledSubtotal = $ci->price * $fulfilledQty;
+                            $item->stock = 0;
+                            $item->save();
+
+                            ItemStockTransaction::create([
+                                'item_id' => $item->id,
+                                'user_id' => $user?->id,
+                                'type' => 'out',
+                                'quantity' => $fulfilledQty,
+                                'remarks' => "Order #{$standardOrder->id} - Partial fulfillment",
+                            ]);
+
+                            OrderItem::create([
+                                'order_id' => $standardOrder->id,
+                                'item_id' => $item->id,
+                                'quantity' => $fulfilledQty,
+                                'price' => $ci->price,
+                                'subtotal' => $fulfilledSubtotal,
+                                'is_backorder' => false,
+                                'backorder_status' => null,
+                            ]);
+
+                            // Remainder goes to backorder order
+                            $backQty = $requestedQty - $fulfilledQty;
+                            if ($backQty > 0) {
+                                $backSubtotal = $ci->price * $backQty;
+                                // Will be added to backorder order below
+                                $ci->setAttribute('backorder_quantity', $backQty);
+                                $ci->setAttribute('backorder_subtotal', $backSubtotal);
+                            }
+                        } else {
+                            // No stock available - will be handled in backorder
+                            $ci->setAttribute('backorder_quantity', $requestedQty);
+                            $ci->setAttribute('backorder_subtotal', $ci->subtotal);
+                        }
+                    }
                 }
 
-                // All orders start as pending until payment is confirmed
-                $orderStatus = 'pending';
+                // Create backorder order
+                $backorderOrder = null;
+                if ($backorderItems->isNotEmpty()) {
+                    $backorderOrder = Order::create([
+                        'user_id' => $user?->id,
+                        'parent_order_id' => $isMixedOrder ? $parentOrder->id : null,
+                        'order_type' => 'backorder',
+                        'status' => 'pending',
+                        'total_amount' => $backorderSubtotal,
+                        'required_payment_amount' => $backorderSubtotal * 0.5,
+                        'remaining_balance' => $backorderSubtotal * 0.5,
+                        'payment_method' => null,
+                        'payment_status' => 'unpaid',
+                    ]);
 
-                $order = Order::create([
-                    'user_id' => $user?->id,
-                    'order_type' => $inferredType,
-                    'status' => $orderStatus,
-                    'total_amount' => $total,
-					'payment_method' => null,
-                    'payment_status' => 'unpaid',
-                ]);
-
-                foreach ($cartItems as $ci) {
-                    $item = Item::lockForUpdate()->find($ci->item_id);
-                    if (!$item) {
-                        throw new \RuntimeException('Item not found');
-                    }
-
-                    $requestedQty = (int) $ci->quantity;
-                    $available = (int) max(0, $item->stock ?? 0);
-
-                    // If the cart line was already marked as backorder, create a backorder OrderItem and do not attempt to fulfill
-                    if (!empty($ci->is_backorder)) {
+                    // Add backorder items to backorder order
+                    foreach ($backorderItems as $ci) {
                         OrderItem::create([
-                            'order_id' => $order->id,
-                            'item_id' => $item->id,
-                            'quantity' => $requestedQty,
+                            'order_id' => $backorderOrder->id,
+                            'item_id' => $ci->item_id,
+                            'quantity' => $ci->quantity,
                             'price' => $ci->price,
                             'subtotal' => $ci->subtotal,
                             'is_backorder' => true,
                             'backorder_status' => \App\Models\OrderItem::BO_PENDING,
                         ]);
-                        continue;
                     }
 
-                    // If item is flagged as backorder-only, treat whole qty as backorder
-                    if ($item->isBackorder()) {
-                        OrderItem::create([
-                            'order_id' => $order->id,
-                            'item_id' => $item->id,
-                            'quantity' => $requestedQty,
-                            'price' => $ci->price,
-                            'subtotal' => $ci->subtotal,
-                            'is_backorder' => true,
-                            'backorder_status' => \App\Models\OrderItem::BO_PENDING,
-                        ]);
-                        continue;
-                    }
-
-                    // If there's enough stock to fully fulfill the line
-                    if ($available >= $requestedQty) {
-                        $item->stock = $available - $requestedQty;
-                        $item->save();
-
-                        // Log stock transaction
-                        ItemStockTransaction::create([
-                            'item_id' => $item->id,
-                            'user_id' => $user?->id,
-                            'type' => 'out',
-                            'quantity' => $requestedQty,
-                            'remarks' => "Order #{$order->id} - Customer order fulfillment",
-                        ]);
-
-                        OrderItem::create([
-                            'order_id' => $order->id,
-                            'item_id' => $item->id,
-                            'quantity' => $requestedQty,
-                            'price' => $ci->price,
-                            'subtotal' => $ci->subtotal,
-                            'is_backorder' => false,
-                            'backorder_status' => null,
-                        ]);
-                        continue;
-                    }
-
-                    // Partial or zero stock: create a fulfilled part (if any) and a backorder remainder
-                    if ($available > 0) {
-                        // Fulfilled portion
-                        $fulfilledQty = $available;
-                        $fulfilledSubtotal = $ci->price * $fulfilledQty;
-                        $item->stock = 0;
-                        $item->save();
-
-                        // Log stock transaction
-                        ItemStockTransaction::create([
-                            'item_id' => $item->id,
-                            'user_id' => $user?->id,
-                            'type' => 'out',
-                            'quantity' => $fulfilledQty,
-                            'remarks' => "Order #{$order->id} - Partial fulfillment (customer order)",
-                        ]);
-
-                        OrderItem::create([
-                            'order_id' => $order->id,
-                            'item_id' => $item->id,
-                            'quantity' => $fulfilledQty,
-                            'price' => $ci->price,
-                            'subtotal' => $fulfilledSubtotal,
-                            'is_backorder' => false,
-                            'backorder_status' => null,
-                        ]);
-                    }
-
-                    $backQty = $requestedQty - $available;
-                    if ($backQty > 0) {
-                        $backSubtotal = $ci->price * $backQty;
-                        OrderItem::create([
-                            'order_id' => $order->id,
-                            'item_id' => $item->id,
-                            'quantity' => $backQty,
-                            'price' => $ci->price,
-                            'subtotal' => $backSubtotal,
-                            'is_backorder' => true,
-                            'backorder_status' => \App\Models\OrderItem::BO_PENDING,
-                        ]);
+                    // Also add partial stock items that belong to backorder
+                    foreach ($cartItems as $ci) {
+                        if (isset($ci->backorder_quantity) && $ci->backorder_quantity > 0) {
+                            OrderItem::create([
+                                'order_id' => $backorderOrder->id,
+                                'item_id' => $ci->item_id,
+                                'quantity' => $ci->backorder_quantity,
+                                'price' => $ci->price,
+                                'subtotal' => $ci->backorder_subtotal,
+                                'is_backorder' => true,
+                                'backorder_status' => \App\Models\OrderItem::BO_PENDING,
+                            ]);
+                        }
                     }
                 }
 
@@ -234,7 +293,8 @@ class CheckoutController extends Controller
                 $cart->status = 'converted';
                 $cart->save();
 
-                return $order;
+                // Return the primary order (parent if mixed, standard if not mixed with backorder, etc)
+                return $parentOrder ?? $standardOrder ?? $backorderOrder;
             });
 		} catch (\Throwable $e) {
             if ($request->expectsJson()) {

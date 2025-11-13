@@ -36,12 +36,44 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                     $isCustomOrder = $order->order_type === 'custom';
                     $customOrder = $isCustomOrder ? $order->customOrders->first() : null;
 				?>
-				<div class="mt-2 text-sm flex flex-wrap gap-2">
+                <div class="mt-2 text-sm flex flex-wrap gap-2">
 					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize bg-gray-100 text-gray-800">Type: <?php echo e($order->order_type); ?></span>
 					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize <?php echo e($statusColor); ?>">Status: <?php echo e($order->status); ?></span>
                 </div>
 
-                <?php if($hasBackorder): ?>
+                <!-- Parent-Sub Order Info -->
+                <?php if($order->order_type === 'mixed' && $order->childOrders->isNotEmpty()): ?>
+                    <div class="mt-4 p-4 rounded-md border border-purple-200 bg-purple-50">
+                        <h3 class="font-medium text-purple-900">Mixed Order Details</h3>
+                        <p class="text-sm text-purple-800 mt-1">Your order contains both standard and back order items. They will be processed and shipped separately for efficiency.</p>
+                        <div class="mt-3 space-y-2">
+                            <?php $__currentLoopData = $order->childOrders; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $child): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <div class="flex items-center justify-between bg-white px-3 py-2 rounded border border-purple-100 text-sm">
+                                    <span class="font-medium text-gray-900"><?php echo e(ucfirst($child->order_type)); ?> Sub-Order #<?php echo e($child->id); ?></span>
+                                    <span class="text-purple-700">₱<?php echo e(number_format($child->total_amount, 2)); ?></span>
+                                </div>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                        </div>
+                        <div class="mt-3 pt-3 border-t border-purple-200">
+                            <div class="flex items-center justify-between">
+                                <span class="font-semibold text-purple-900">Total Amount</span>
+                                <span class="text-lg font-bold text-purple-900">₱<?php echo e(number_format($order->total_amount, 2)); ?></span>
+                            </div>
+                        </div>
+                    </div>
+                <?php elseif($order->parent_order_id): ?>
+                    <!-- This is a sub-order -->
+                    <?php $parentOrder = $order->parentOrder; ?>
+                    <div class="mt-4 p-4 rounded-md border border-purple-200 bg-purple-50">
+                        <h3 class="font-medium text-purple-900">Part of Mixed Order</h3>
+                        <p class="text-sm text-purple-800 mt-1">This is a <?php echo e(ucfirst($order->order_type)); ?> sub-order from your parent mixed order.</p>
+                        <div class="mt-2 text-sm">
+                            <strong>Parent Order:</strong> #<?php echo e($parentOrder->id); ?> (₱<?php echo e(number_format($parentOrder->total_amount, 2)); ?>)
+                        </div>
+                    </div>
+                <?php endif; ?>
+
+                <?php if($hasBackorder && !$order->parent_order_id && $order->order_type !== 'mixed'): ?>
                     <div class="mt-4 p-4 rounded-md border border-blue-200 bg-blue-50">
                         <h3 class="font-medium text-blue-900">Order Status</h3>
                         <div class="mt-2 text-sm text-blue-800 space-y-1">
@@ -49,9 +81,7 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                             <p><strong>⏳ Back Order Items:</strong> Awaiting stock - will ship separately once restocked</p>
                         </div>
                     </div>
-                <?php endif; ?>
-
-                <?php if($isCustomOrder && $customOrder): ?>
+                <?php endif; ?>                <?php if($isCustomOrder && $customOrder): ?>
                     <?php
                         $customStatusColor = match($customOrder->status) {
                             'pending_review' => 'bg-yellow-100 text-yellow-800',
