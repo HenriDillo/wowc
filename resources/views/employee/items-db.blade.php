@@ -43,6 +43,7 @@
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Item Name</th>
+                        <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Images</th>
                         <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Category</th>
                         <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Price</th>
                         <th class="px-4 py-2 text-left font-semibold text-gray-700 uppercase text-xs tracking-wider">Stock</th>
@@ -54,6 +55,26 @@
                     @forelse($visibleItems as $i)
                         <tr class="hover:bg-gray-50 border-b">
                             <td class="px-4 py-3 text-sm text-gray-900">{{ $i->name }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                @php
+                                    $photos = $i->photos ?? collect();
+                                    $photoCount = $photos->count();
+                                @endphp
+                                @if($photoCount > 0)
+                                    <div class="flex items-center gap-2">
+                                        <div class="flex -space-x-2">
+                                            @foreach($photos->take(3) as $photo)
+                                                <img src="{{ $photo->url }}" alt="{{ $i->name }}" class="w-10 h-10 rounded border-2 border-white object-cover shadow-sm" title="{{ $i->name }}">
+                                            @endforeach
+                                        </div>
+                                        @if($photoCount > 3)
+                                            <span class="text-xs text-gray-500 font-medium">+{{ $photoCount - 3 }}</span>
+                                        @endif
+                                    </div>
+                                @else
+                                    <span class="text-xs text-gray-400 italic">No images</span>
+                                @endif
+                            </td>
                             <td class="px-4 py-3 text-sm text-gray-700">{{ $i->category }}</td>
                             <td class="px-4 py-3 text-sm text-gray-700">₱{{ number_format($i->price, 2) }}</td>
                             <td class="px-4 py-3 text-sm text-gray-700 font-medium">{{ $i->stock ?? 0 }}</td>
@@ -73,9 +94,115 @@
                                 </div>
                             </td>
                         </tr>
+
+                        {{-- Edit Modal --}}
+                        <div x-show="editId === {{ $i->id }}" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+                            <div @click.outside="editId = null" class="bg-white p-6 rounded-lg w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+                                <h2 class="text-xl font-semibold mb-4">Edit Item</h2>
+                                <form action="{{ route('employee.items.update', $i) }}" method="POST" enctype="multipart/form-data" class="space-y-4">
+                                    @csrf
+                                    @method('PUT')
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <input type="text" name="name" value="{{ $i->name }}" placeholder="Item name" class="w-full border rounded px-3 py-2" required>
+                                            @php($bag = 'edit_' . $i->id)
+                                            @if($errors->getBag($bag)->has('name'))
+                                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('name') }}</p>
+                                            @endif
+                                        </div>
+                                        <div>
+                                            <select name="category" class="w-full border rounded px-3 py-2" required>
+                                                <option value="Caddy" {{ $i->category === 'Caddy' ? 'selected' : '' }}>Caddy</option>
+                                                <option value="Carpet" {{ $i->category === 'Carpet' ? 'selected' : '' }}>Carpet</option>
+                                                <option value="Placemat" {{ $i->category === 'Placemat' ? 'selected' : '' }}>Placemat</option>
+                                                <option value="Others" {{ $i->category === 'Others' ? 'selected' : '' }}>Others</option>
+                                            </select>
+                                            @if($errors->getBag($bag)->has('category'))
+                                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('category') }}</p>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <input type="number" step="0.01" name="price" value="{{ $i->price }}" placeholder="Price" class="w-full border rounded px-3 py-2" min="0" required>
+                                            @if($errors->getBag($bag)->has('price'))
+                                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('price') }}</p>
+                                            @endif
+                                        </div>
+                                        <div>
+                                            <input type="text" name="description" value="{{ $i->description }}" placeholder="Description (optional)" class="w-full border rounded px-3 py-2">
+                                            @if($errors->getBag($bag)->has('description'))
+                                                <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('description') }}</p>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    {{-- Existing Images --}}
+                                    @php($itemPhotos = $i->photos ?? collect())
+                                    @if($itemPhotos->count() > 0)
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Current Images</label>
+                                            <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                                                @foreach($itemPhotos as $photo)
+                                                    <div class="relative group">
+                                                        <img src="{{ $photo->url }}" alt="Product image" class="w-full h-24 object-cover rounded border border-gray-200">
+                                                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
+                                                            <label class="cursor-pointer text-white text-xs px-2 py-1 bg-red-600 rounded hover:bg-red-700">
+                                                                <input type="checkbox" name="remove_photo_ids[]" value="{{ $photo->id }}" class="hidden" onchange="this.parentElement.parentElement.parentElement.style.opacity = this.checked ? '0.5' : '1'">
+                                                                Remove
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                            <p class="text-xs text-gray-500 mt-2">Check "Remove" on images you want to delete</p>
+                                        </div>
+                                    @endif
+
+                                    {{-- Add New Images --}}
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Add New Images (Multiple allowed)</label>
+                                        <input type="file" name="photos[]" multiple accept="image/*" class="w-full border rounded px-3 py-2 text-sm">
+                                        <p class="text-xs text-gray-500 mt-1">You can select multiple images. Accepted formats: JPG, PNG, GIF. Max size: 2MB per image.</p>
+                                        @if($errors->getBag($bag)->has('photos.*'))
+                                            <p class="text-red-500 text-sm mt-1">{{ $errors->getBag($bag)->first('photos.*') }}</p>
+                                        @endif
+                                    </div>
+
+                                    <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+                                        <button type="button" @click="editId = null" class="px-3 py-1.5 text-sm border rounded hover:bg-gray-50">Cancel</button>
+                                        <button type="submit" class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        {{-- Add Stock Modal --}}
+                        <div x-show="addStockId === {{ $i->id }}" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+                            <div @click.outside="addStockId = null" class="bg-white p-6 rounded-lg w-96 shadow-xl">
+                                <h2 class="text-xl font-semibold mb-4">Add Stock - {{ $i->name }}</h2>
+                                <form action="{{ route('employee.items.add-stock', $i) }}" method="POST" class="space-y-3">
+                                    @csrf
+                                    <div>
+                                        <label class="block text-sm text-gray-700 mb-1">Quantity</label>
+                                        <input name="quantity" type="number" min="1" required class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-700 mb-1">Remarks (optional)</label>
+                                        <textarea name="remarks" class="w-full border rounded px-3 py-2" rows="2"></textarea>
+                                    </div>
+                                    <div class="flex justify-end gap-2">
+                                        <button type="button" @click="addStockId = null" class="px-3 py-2 text-gray-700 border rounded">Cancel</button>
+                                        <button type="submit" class="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700">Add Stock</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
                     @empty
                         <tr>
-                            <td colspan="6" class="px-4 py-6 text-center text-gray-500">No items found</td>
+                            <td colspan="7" class="px-4 py-6 text-center text-gray-500">No items found</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -173,67 +300,6 @@
         </div>
     </div>
 
-    {{-- Add Stock Modal (for individual items) --}}
-    <template x-if="addStockId">
-        <div x-show="addStockId" x-cloak x-transition class="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
-            <div @click.outside="addStockId = null" class="bg-white p-6 rounded-lg max-w-md w-full shadow-xl">
-                <h2 class="text-xl font-semibold mb-4">Add Stock</h2>
-                <form id="addStockForm" @submit.prevent="(async function(){
-                    const quantity = document.getElementById('addStockQty').value;
-                    const remarks = document.getElementById('addStockRemarks').value;
-                    const itemId = addStockId;
-                    const token = document.querySelector('input[name=_token]')?.value || document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
-
-                    if(!quantity || parseInt(quantity) <= 0){
-                        alert('Please enter a valid quantity');
-                        return;
-                    }
-
-                    const url = `/employee/items/${itemId}/add-stock`;
-
-                    try {
-                        const res = await fetch(url, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': token,
-                                'X-Requested-With': 'XMLHttpRequest'
-                            },
-                            body: JSON.stringify({ quantity: parseInt(quantity), remarks: remarks })
-                        });
-
-                        if(res.redirected){
-                            window.location = res.url;
-                            return;
-                        }
-
-                        if(res.ok){
-                            window.location.reload();
-                            return;
-                        }
-
-                        const errData = await res.json().catch(() => ({}));
-                        alert(errData.message || 'Failed to add stock');
-                    } catch(e) {
-                        alert('Request failed: ' + e.message);
-                    }
-                })()" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                        <input type="number" id="addStockQty" min="1" required class="w-full border rounded px-3 py-2 text-sm" placeholder="e.g., 10" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Remarks (optional)</label>
-                        <textarea id="addStockRemarks" class="w-full border rounded px-3 py-2 text-sm" rows="2" placeholder="e.g., Stock received"></textarea>
-                    </div>
-                    <div class="flex justify-end gap-2 pt-4 border-t">
-                        <button type="button" @click="addStockId = null" class="px-4 py-2 border rounded-lg shadow-sm hover:bg-gray-50">Cancel</button>
-                        <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Add Stock</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </template>
 
     {{-- Transaction History Section with Filters --}}
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm mt-6">
@@ -411,6 +477,15 @@
                             <p class="text-red-500 text-sm mt-1">{{ $errors->getBag('createItem')->first('description') }}</p>
                         @endif
                     </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Product Images (Multiple allowed)</label>
+                    <input type="file" name="photos[]" multiple accept="image/*" class="w-full border rounded px-3 py-2 text-sm">
+                    <p class="text-xs text-gray-500 mt-1">You can select multiple images. Accepted formats: JPG, PNG, GIF. Max size: 2MB per image.</p>
+                    @if($errors->getBag('createItem')->has('photos.*'))
+                        <p class="text-red-500 text-sm mt-1">{{ $errors->getBag('createItem')->first('photos.*') }}</p>
+                    @endif
                 </div>
 
                 <div class="flex justify-end gap-2 mt-6 pt-4 border-t">

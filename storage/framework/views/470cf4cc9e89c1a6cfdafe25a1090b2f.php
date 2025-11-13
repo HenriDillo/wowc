@@ -12,7 +12,7 @@
 </head>
 <body x-data="{ dropdownOpen: false, mobileMenuOpen: false, scrolled: false }" @scroll.window="scrolled = window.scrollY > 4" class="bg-white" style="font-family: 'Poppins', 'Inter', ui-sans-serif, system-ui;">
 
-    @include('partials.customer-header')
+    <?php echo $__env->make('partials.customer-header', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 
     <!-- Content -->
     <section class="pt-24 pb-12">
@@ -20,27 +20,84 @@
             <div class="bg-white overflow-hidden border border-gray-100 rounded-xl shadow-sm">
                 <div class="p-6 md:p-8 text-gray-900">
                     <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Custom Order Request</h1>
-                    <form id="customOrderForm" method="POST" action="{{ route('custom-orders.store') }}" enctype="multipart/form-data" class="space-y-6">
-                        @csrf
+                    <form id="customOrderForm" method="POST" action="<?php echo e(route('custom-orders.store')); ?>" enctype="multipart/form-data" class="space-y-6">
+                        <?php echo csrf_field(); ?>
 
                         <div>
                             <label for="custom_name" class="block text-sm font-medium text-gray-700 mb-2">Product Name/Title</label>
-                            <input id="custom_name" name="custom_name" type="text" class="mt-1 block w-full rounded-md border-2 border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f] focus:outline-none" value="{{ old('custom_name') }}" required autofocus placeholder="Enter product name or title" />
-                            <x-input-error :messages="$errors->get('custom_name')" class="mt-2" />
+                            <input id="custom_name" name="custom_name" type="text" class="mt-1 block w-full rounded-md border-2 border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f] focus:outline-none" value="<?php echo e(old('custom_name')); ?>" required autofocus placeholder="Enter product name or title" />
+                            <?php if (isset($component)) { $__componentOriginalf94ed9c5393ef72725d159fe01139746 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginalf94ed9c5393ef72725d159fe01139746 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.input-error','data' => ['messages' => $errors->get('custom_name'),'class' => 'mt-2']] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('input-error'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['messages' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($errors->get('custom_name')),'class' => 'mt-2']); ?>
+<?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginalf94ed9c5393ef72725d159fe01139746)): ?>
+<?php $attributes = $__attributesOriginalf94ed9c5393ef72725d159fe01139746; ?>
+<?php unset($__attributesOriginalf94ed9c5393ef72725d159fe01139746); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginalf94ed9c5393ef72725d159fe01139746)): ?>
+<?php $component = $__componentOriginalf94ed9c5393ef72725d159fe01139746; ?>
+<?php unset($__componentOriginalf94ed9c5393ef72725d159fe01139746); ?>
+<?php endif; ?>
                             <p id="custom_name_error" class="mt-2 text-sm text-red-600"></p>
                         </div>
 
                         <div>
                             <label for="description" class="block text-sm font-medium text-gray-700 mb-2">Description/Special Instructions</label>
-                            <textarea id="description" name="description" rows="4" class="mt-1 block w-full rounded-md border-2 border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f] focus:outline-none" required placeholder="Describe your custom order and any special instructions...">{{ old('description') }}</textarea>
-                            <x-input-error :messages="$errors->get('description')" class="mt-2" />
+                            <textarea id="description" name="description" rows="4" class="mt-1 block w-full rounded-md border-2 border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f] focus:outline-none" required placeholder="Describe your custom order and any special instructions..."><?php echo e(old('description')); ?></textarea>
+                            <?php if (isset($component)) { $__componentOriginalf94ed9c5393ef72725d159fe01139746 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginalf94ed9c5393ef72725d159fe01139746 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.input-error','data' => ['messages' => $errors->get('description'),'class' => 'mt-2']] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('input-error'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['messages' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($errors->get('description')),'class' => 'mt-2']); ?>
+<?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginalf94ed9c5393ef72725d159fe01139746)): ?>
+<?php $attributes = $__attributesOriginalf94ed9c5393ef72725d159fe01139746; ?>
+<?php unset($__attributesOriginalf94ed9c5393ef72725d159fe01139746); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginalf94ed9c5393ef72725d159fe01139746)): ?>
+<?php $component = $__componentOriginalf94ed9c5393ef72725d159fe01139746; ?>
+<?php unset($__componentOriginalf94ed9c5393ef72725d159fe01139746); ?>
+<?php endif; ?>
                             <p id="description_error" class="mt-2 text-sm text-red-600"></p>
                         </div>
 
                         <div>
                             <label for="quantity" class="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                            <input id="quantity" name="quantity" type="number" min="1" class="mt-1 block w-full rounded-md border-2 border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f] focus:outline-none" value="{{ old('quantity', 1) }}" required />
-                            <x-input-error :messages="$errors->get('quantity')" class="mt-2" />
+                            <input id="quantity" name="quantity" type="number" min="1" class="mt-1 block w-full rounded-md border-2 border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f] focus:outline-none" value="<?php echo e(old('quantity', 1)); ?>" required />
+                            <?php if (isset($component)) { $__componentOriginalf94ed9c5393ef72725d159fe01139746 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginalf94ed9c5393ef72725d159fe01139746 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.input-error','data' => ['messages' => $errors->get('quantity'),'class' => 'mt-2']] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('input-error'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['messages' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($errors->get('quantity')),'class' => 'mt-2']); ?>
+<?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginalf94ed9c5393ef72725d159fe01139746)): ?>
+<?php $attributes = $__attributesOriginalf94ed9c5393ef72725d159fe01139746; ?>
+<?php unset($__attributesOriginalf94ed9c5393ef72725d159fe01139746); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginalf94ed9c5393ef72725d159fe01139746)): ?>
+<?php $component = $__componentOriginalf94ed9c5393ef72725d159fe01139746; ?>
+<?php unset($__componentOriginalf94ed9c5393ef72725d159fe01139746); ?>
+<?php endif; ?>
                             <p id="quantity_error" class="mt-2 text-sm text-red-600"></p>
                         </div>
 
@@ -50,14 +107,33 @@
                             <p class="mt-2 text-sm text-gray-600">
                                 <strong>Please take pictures from different angles.</strong> You can upload up to 4 images (JPG/PNG, max 5MB each).
                             </p>
-                            <x-input-error :messages="$errors->get('reference_images.*')" class="mt-2" />
+                            <?php if (isset($component)) { $__componentOriginalf94ed9c5393ef72725d159fe01139746 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginalf94ed9c5393ef72725d159fe01139746 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.input-error','data' => ['messages' => $errors->get('reference_images.*'),'class' => 'mt-2']] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('input-error'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['messages' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($errors->get('reference_images.*')),'class' => 'mt-2']); ?>
+<?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginalf94ed9c5393ef72725d159fe01139746)): ?>
+<?php $attributes = $__attributesOriginalf94ed9c5393ef72725d159fe01139746; ?>
+<?php unset($__attributesOriginalf94ed9c5393ef72725d159fe01139746); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginalf94ed9c5393ef72725d159fe01139746)): ?>
+<?php $component = $__componentOriginalf94ed9c5393ef72725d159fe01139746; ?>
+<?php unset($__componentOriginalf94ed9c5393ef72725d159fe01139746); ?>
+<?php endif; ?>
                             <p id="reference_images_error" class="mt-2 text-sm text-red-600"></p>
                         </div>
 
                         <div id="imagePreview" class="mt-4"></div>
 
                         <div class="mt-6 flex items-center justify-end gap-x-6">
-                            <a href="{{ route('products.index') }}" class="text-sm font-semibold leading-6 text-gray-900">Cancel</a>
+                            <a href="<?php echo e(route('products.index')); ?>" class="text-sm font-semibold leading-6 text-gray-900">Cancel</a>
                             <button type="submit" class="rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="background:#c59d5f;">
                                 Submit Custom Order
                             </button>
@@ -178,7 +254,7 @@
         </div>
     </section>
 
-    @include('partials.customer-footer')
+    <?php echo $__env->make('partials.customer-footer', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 
 </body>
-</html>
+</html><?php /**PATH C:\xampp\htdocs\wowc\resources\views/custom-order/create.blade.php ENDPATH**/ ?>

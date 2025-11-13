@@ -64,12 +64,6 @@
 									<dd class="text-gray-900">{{ $customOrder->description }}</dd>
 								</div>
 								<div>
-									<dt class="text-gray-500">Dimensions</dt>
-									<dd class="text-gray-900">
-										{{ data_get($customOrder->customization_details, 'dimensions') ?: '—' }}
-									</dd>
-								</div>
-								<div>
 									<dt class="text-gray-500">Quantity</dt>
 									<dd class="text-gray-900">{{ $customOrder->quantity }}</dd>
 								</div>
@@ -97,12 +91,25 @@
 						</div>
 
 						<div>
-							<h2 class="text-lg font-semibold text-gray-900">Reference Image</h2>
+							<h2 class="text-lg font-semibold text-gray-900">Reference Images</h2>
 							<div class="mt-3">
-								@if ($customOrder->reference_image_path)
-									<img src="{{ \Illuminate\Support\Facades\Storage::url($customOrder->reference_image_path) }}" alt="Reference" class="max-h-80 rounded border border-gray-200">
+								@php
+									$images = data_get($customOrder->customization_details, 'images', []);
+									// Fallback to single image for backward compatibility
+									if (empty($images) && $customOrder->reference_image_path) {
+										$images = [$customOrder->reference_image_path];
+									}
+								@endphp
+								@if(!empty($images))
+									<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+										@foreach($images as $imagePath)
+											<div class="relative">
+												<img src="{{ \Illuminate\Support\Facades\Storage::url($imagePath) }}" alt="Reference Image {{ $loop->iteration }}" class="w-full h-auto max-h-80 rounded border border-gray-200 shadow-sm object-cover">
+											</div>
+										@endforeach
+									</div>
 								@else
-									<p class="text-sm text-gray-500">No image provided.</p>
+									<p class="text-sm text-gray-500">No images provided.</p>
 								@endif
 							</div>
 						</div>

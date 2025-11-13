@@ -20,17 +20,27 @@ class CustomOrderController extends Controller
         $validated = $request->validate([
             'custom_name' => 'required|string|max:255',
             'description' => 'required|string',
-            'customization_details' => 'required|array',
-            'customization_details.dimensions' => 'required|string',
-            'reference_image' => 'required|image|mimes:jpeg,png,jpg|max:5120',
+            'reference_images' => 'required|array|min:1|max:4',
+            'reference_images.*' => 'required|image|mimes:jpeg,png,jpg|max:5120',
             'quantity' => 'required|integer|min:1',
         ]);
 
-        // Handle file upload
-        if ($request->hasFile('reference_image')) {
-            $path = $request->file('reference_image')->store('custom-orders', 'public');
-            $validated['reference_image_path'] = $path;
+        // Handle multiple file uploads
+        $imagePaths = [];
+        if ($request->hasFile('reference_images')) {
+            foreach ($request->file('reference_images') as $file) {
+                $path = $file->store('custom-orders', 'public');
+                $imagePaths[] = $path;
+            }
         }
+
+        // Store first image in reference_image_path for backward compatibility
+        $firstImagePath = !empty($imagePaths) ? $imagePaths[0] : null;
+
+        // Store all image paths in customization_details
+        $customizationDetails = [
+            'images' => $imagePaths,
+        ];
 
         // Create order
         $order = Order::create([
@@ -44,8 +54,8 @@ class CustomOrderController extends Controller
         $customOrder = new CustomOrder([
             'custom_name' => $validated['custom_name'],
             'description' => $validated['description'],
-            'customization_details' => $validated['customization_details'],
-            'reference_image_path' => $validated['reference_image_path'] ?? null,
+            'customization_details' => $customizationDetails,
+            'reference_image_path' => $firstImagePath,
             'quantity' => $validated['quantity'],
             'status' => CustomOrder::STATUS_PENDING_REVIEW,
         ]);
@@ -64,6 +74,7 @@ class CustomOrderController extends Controller
             abort(403);
         }
 
-        return view('custom-order.show', compact('customOrder'));
+        // Redirect to unified order details page
+        return redirect()->route('customer.orders.show', $customOrder->order->id);
     }
 }

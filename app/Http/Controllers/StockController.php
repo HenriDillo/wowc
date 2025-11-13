@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Item;
+use App\Models\ItemStockTransaction;
 use App\Models\Material;
 
 class StockController extends Controller
@@ -81,6 +82,15 @@ class StockController extends Controller
                     // We can fulfill this order item now
                     $oi->backorder_status = \App\Models\OrderItem::BO_IN_PROGRESS;
                     $oi->save();
+
+                    // Log stock transaction for backorder fulfillment
+                    ItemStockTransaction::create([
+                        'item_id' => $item->id,
+                        'user_id' => Auth::id(),
+                        'type' => 'out',
+                        'quantity' => $oi->quantity,
+                        'remarks' => "Backorder fulfillment - Order #{$oi->order_id}, OrderItem #{$oi->id}",
+                    ]);
 
                     // Notify customer that their backorder is now ready for fulfillment
                     try {

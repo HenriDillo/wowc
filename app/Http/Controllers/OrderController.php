@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Item;
+use App\Models\ItemStockTransaction;
 use App\Models\Order;
 use App\Models\OrderItem;
 use Illuminate\Http\Request;
@@ -135,6 +136,15 @@ class OrderController extends Controller
                     $item->stock = $available - $quantity;
                     $item->save();
 
+                    // Log stock transaction
+                    ItemStockTransaction::create([
+                        'item_id' => $item->id,
+                        'user_id' => $user->id,
+                        'type' => 'out',
+                        'quantity' => $quantity,
+                        'remarks' => "Order #{$order->id} - Customer order fulfillment",
+                    ]);
+
                     OrderItem::create([
                         'order_id' => $order->id,
                         'item_id' => $item->id,
@@ -152,6 +162,15 @@ class OrderController extends Controller
                     $fulfilledSubtotal = $price * $fulfilledQty;
                     $item->stock = 0;
                     $item->save();
+
+                    // Log stock transaction
+                    ItemStockTransaction::create([
+                        'item_id' => $item->id,
+                        'user_id' => $user->id,
+                        'type' => 'out',
+                        'quantity' => $fulfilledQty,
+                        'remarks' => "Order #{$order->id} - Partial fulfillment (customer order)",
+                    ]);
 
                     OrderItem::create([
                         'order_id' => $order->id,
