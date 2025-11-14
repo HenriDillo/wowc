@@ -10,6 +10,10 @@
 </head>
 <body x-data="{ dropdownOpen: false }">
 
+@php
+use Illuminate\Support\Facades\DB;
+@endphp
+
 <div class="flex min-h-screen bg-gray-50">
     <!-- Sidebar -->
     <div class="w-64 bg-[#c49b6e] flex flex-col shadow-lg">
@@ -28,20 +32,26 @@
                     <path d="M4 3h12a1 1 0 011 1v3H3V4a1 1 0 011-1z"></path>
                     <path d="M3 8h14v8a1 1 0 01-1 1H4a1 1 0 01-1-1V8z"></path>
                 </svg>
-                <span class="font-medium">Raw Materials Management</span>
+                <span class="font-medium">Raw Materials</span>
             </a>
             <a href="{{ route('employee.items') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M6 3a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V4a1 1 0 00-1-1H6z"></path>
                 </svg>
-                <span class="font-medium">Production Management</span>
+                <span class="font-medium">Production</span>
             </a>
             <a href="{{ route('employee.orders') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M3 3h14a1 1 0 011 1v3H2V4a1 1 0 011-1z"></path>
                     <path d="M2 8h16v8a1 1 0 01-1 1H3a1 1 0 01-1-1V8z"></path>
                 </svg>
-                <span class="font-medium">Order Management</span>
+                <span class="font-medium">Orders</span>
+            </a>
+            <a href="{{ route('employee.reports') }}" class="flex items-center space-x-3 p-3 text-white hover:bg-[#b08a5c] rounded-lg transition-colors">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path>
+                </svg>
+                <span class="font-medium">Reports</span>
             </a>
         </nav>
     </div>
@@ -119,6 +129,171 @@
                         </div>
                     </div>
                 </a>
+            </div>
+
+            <!-- Reports Section -->
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Reports & Analytics</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <a href="{{ route('employee.reports.sales') }}" class="block bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl shadow-sm hover:shadow transition p-6">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <div class="text-sm font-semibold text-blue-900 mb-2">Sales Report</div>
+                                <p class="text-xs text-blue-700">View sales metrics by period, order type, and payment method</p>
+                            </div>
+                            <div class="text-3xl">📊</div>
+                        </div>
+                        <div class="mt-3 text-xs text-blue-600 font-medium">View Report →</div>
+                    </a>
+                    <a href="{{ route('employee.reports.inventory') }}" class="block bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl shadow-sm hover:shadow transition p-6">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <div class="text-sm font-semibold text-green-900 mb-2">Inventory Report</div>
+                                <p class="text-xs text-green-700">Monitor stock levels, reorder alerts, and movements</p>
+                            </div>
+                            <div class="text-3xl">📦</div>
+                        </div>
+                        <div class="mt-3 text-xs text-green-600 font-medium">View Report →</div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Calendar Widget -->
+            <div x-data="{ calendarMonth: {{ now()->month }}, calendarYear: {{ now()->year }} }">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Events Calendar</h2>
+                <div class="bg-white border rounded-xl shadow-sm p-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-semibold text-gray-900" x-text="`${new Date(calendarYear, calendarMonth - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}`"></h3>
+                        <div class="flex gap-2">
+                            <button @click="calendarMonth = calendarMonth === 1 ? 12 : calendarMonth - 1; if(calendarMonth === 12) calendarYear--" class="p-1 hover:bg-gray-100 rounded text-gray-600">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                            </button>
+                            <button @click="calendarMonth = {{ now()->month }}; calendarYear = {{ now()->year }}" class="px-2 py-1 text-xs font-medium text-[#c49b6e] hover:bg-amber-50 rounded">Today</button>
+                            <button @click="calendarMonth = calendarMonth === 12 ? 1 : calendarMonth + 1; if(calendarMonth === 1) calendarYear++" class="p-1 hover:bg-gray-100 rounded text-gray-600">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Calendar Grid -->
+                    <div class="grid grid-cols-7 gap-1 mb-3">
+                        <div class="text-center text-xs font-semibold text-gray-600 py-1">Sun</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-1">Mon</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-1">Tue</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-1">Wed</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-1">Thu</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-1">Fri</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-1">Sat</div>
+                    </div>
+
+                    @php
+                        $month = now()->month;
+                        $year = now()->year;
+                        $firstDay = \Carbon\Carbon::createFromDate($year, $month, 1);
+                        $lastDay = $firstDay->copy()->endOfMonth();
+                        $startDate = $firstDay->copy()->startOfWeek();
+                        $endDate = $lastDay->copy()->endOfWeek();
+
+                        // Get events for current month
+                        $restockDates = \App\Models\Order::whereBetween('expected_restock_date', [$firstDay, $lastDay])
+                            ->where('order_type', 'backorder')
+                            ->where('expected_restock_date', '!=', null)
+                            ->selectRaw("DATE(expected_restock_date) as date, COUNT(*) as count")
+                            ->groupBy('date')
+                            ->get()
+                            ->keyBy('date');
+
+                        $orderDeadlines = \App\Models\Order::whereBetween('created_at', [$firstDay, $lastDay])
+                            ->whereIn('status', ['pending', 'processing'])
+                            ->selectRaw("DATE(DATE_ADD(created_at, INTERVAL 3 DAY)) as deadline_date, COUNT(*) as count")
+                            ->groupBy('deadline_date')
+                            ->get()
+                            ->keyBy('deadline_date');
+
+                        $customOrderDates = DB::table('custom_orders')
+                            ->whereBetween('created_at', [$firstDay, $lastDay])
+                            ->selectRaw("DATE(created_at) as date, COUNT(*) as count")
+                            ->groupBy('date')
+                            ->get()
+                            ->keyBy('date');
+
+                        $deliveries = \App\Models\Order::whereBetween('created_at', [$firstDay, $lastDay])
+                            ->where('status', 'shipped')
+                            ->where('delivered_at', null)
+                            ->selectRaw("DATE(DATE_ADD(created_at, INTERVAL 3 DAY)) as delivery_date, COUNT(*) as count")
+                            ->groupBy('delivery_date')
+                            ->get()
+                            ->keyBy('delivery_date');
+
+                        $events = [
+                            'restock' => $restockDates,
+                            'deadlines' => $orderDeadlines,
+                            'customs' => $customOrderDates,
+                            'deliveries' => $deliveries,
+                        ];
+                    @endphp
+
+                    <div class="grid grid-cols-7 gap-1">
+                        @for($date = $startDate; $date <= $endDate; $date->addDay())
+                            @php
+                                $dateString = $date->format('Y-m-d');
+                                $restockCount = $events['restock'][$dateString]->count ?? 0;
+                                $deadlineCount = $events['deadlines'][$dateString]->count ?? 0;
+                                $customCount = $events['customs'][$dateString]->count ?? 0;
+                                $deliveryCount = $events['deliveries'][$dateString]->count ?? 0;
+                                $totalEvents = $restockCount + $deadlineCount + $customCount + $deliveryCount;
+                                $hasEvent = $totalEvents > 0;
+                            @endphp
+                            <div class="h-12 flex flex-col items-center justify-start text-xs border rounded p-0.5
+                                {{ $date->month != $month ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-700' }}
+                                {{ $date->isToday() ? 'bg-[#c49b6e] text-white font-bold ring-2 ring-[#b08a5c]' : '' }}
+                                {{ $hasEvent ? 'border-[#c49b6e] border-2' : '' }}"
+                                title="{{ $hasEvent ? "📦: $restockCount | ⏰: $deadlineCount | ✏️: $customCount | 🚚: $deliveryCount" : '' }}">
+                                <div class="font-semibold">{{ $date->day }}</div>
+                                @if($hasEvent)
+                                    <div class="flex flex-wrap gap-0.5 mt-0.5 justify-center w-full">
+                                        @if($restockCount > 0)
+                                            <span class="w-1 h-1 bg-purple-500 rounded-full"></span>
+                                        @endif
+                                        @if($deadlineCount > 0)
+                                            <span class="w-1 h-1 bg-orange-500 rounded-full"></span>
+                                        @endif
+                                        @if($customCount > 0)
+                                            <span class="w-1 h-1 bg-pink-500 rounded-full"></span>
+                                        @endif
+                                        @if($deliveryCount > 0)
+                                            <span class="w-1 h-1 bg-green-500 rounded-full"></span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </div>
+                        @endfor
+                    </div>
+
+                    <!-- Event Legend -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4 pt-4 border-t text-xs">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 bg-purple-500 rounded-full"></span>
+                            <span class="text-gray-600">Restock</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 bg-orange-500 rounded-full"></span>
+                            <span class="text-gray-600">Deadline</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 bg-pink-500 rounded-full"></span>
+                            <span class="text-gray-600">Custom</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                            <span class="text-gray-600">Delivery</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Recent Activity -->

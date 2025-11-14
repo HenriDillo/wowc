@@ -29,12 +29,12 @@ class OrderController extends Controller
             ->whereIn('backorder_status', [\App\Models\OrderItem::BO_PENDING, \App\Models\OrderItem::BO_IN_PROGRESS])
             ->orderByDesc('created_at')
             ->get();
-            // Fetch custom orders for the customer
-            $customOrders = \App\Models\CustomOrder::with(['order'])
+            // Fetch custom orders for the customer (including rejected so they can see the reason)
+            $customOrders = \App\Models\CustomOrder::with(['order.payments'])
                 ->whereHas('order', function($q) use ($user) {
                     $q->where('user_id', $user->id);
                 })
-                ->whereIn('status', ['pending_review', 'approved', 'in_production'])
+                ->whereIn('status', ['pending_review', 'approved', 'rejected', 'in_production'])
                 ->latest()
                 ->get();
 
@@ -48,7 +48,7 @@ class OrderController extends Controller
     public function show($id)
     {
         $user = Auth::user();
-		$order = Order::with(['user.address', 'items.item.photos', 'payments', 'customOrders'])
+		$order = Order::with(['user.address', 'items.item.photos', 'payments.verifier', 'customOrders'])
             ->where('user_id', $user->id)
             ->findOrFail($id);
 

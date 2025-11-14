@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\Employee\MaterialController;
 use App\Http\Controllers\Employee\ItemController;
+use App\Http\Controllers\Employee\ReportController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\ProductController;
@@ -141,6 +142,10 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::get('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'show'])->name('orders.show');
     Route::put('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'update'])->name('orders.update');
     Route::delete('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'destroy'])->name('orders.destroy');
+    // Payment verification
+    Route::post('/orders/{id}/verify-payment', [\App\Http\Controllers\Employee\OrderController::class, 'verifyPayment'])->name('orders.verify-payment');
+    // COD collection
+    Route::post('/orders/{id}/collect-cod', [\App\Http\Controllers\Employee\OrderController::class, 'collectCod'])->name('orders.collect-cod');
     // Per-order-item backorder updates
     Route::post('/orders/{order}/items/{item}/backorder', [\App\Http\Controllers\Employee\OrderController::class, 'updateItemBackorder'])->name('orders.items.backorder');
 
@@ -148,6 +153,14 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::get('/custom-orders/{id}', [\App\Http\Controllers\Employee\CustomOrderController::class, 'show'])->name('custom-orders.show');
     Route::put('/custom-orders/{id}', [\App\Http\Controllers\Employee\CustomOrderController::class, 'update'])->name('custom-orders.update');
     Route::put('/custom-orders/{id}/confirm', [\App\Http\Controllers\Employee\CustomOrderController::class, 'confirm'])->name('custom-orders.confirm');
+    Route::post('/custom-orders/{id}/accept', [\App\Http\Controllers\Employee\CustomOrderController::class, 'accept'])->name('custom-orders.accept');
+    Route::post('/custom-orders/{id}/reject', [\App\Http\Controllers\Employee\CustomOrderController::class, 'reject'])->name('custom-orders.reject');
+
+    // Reports
+    Route::get('/reports', [ReportController::class, 'unified'])->name('reports');
+    Route::get('/reports/sales', [ReportController::class, 'salesReport'])->name('reports.sales');
+    Route::get('/reports/inventory', [ReportController::class, 'inventoryReport'])->name('reports.inventory');
+    Route::get('/reports/calendar', [ReportController::class, 'calendar'])->name('reports.calendar');
 });
 
 // Admin routes (authenticated, prefixed and named)

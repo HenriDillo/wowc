@@ -53,6 +53,29 @@
                             </div>
                             <div class="flex flex-col items-end gap-2">
                                 <div class="text-sm text-gray-700">Order #{{ $co->order->id }}</div>
+                                @if($co->order)
+                                    @php
+                                        $paymentStatus = $co->order->payment_status ?? 'unpaid';
+                                        $isFullyPaid = $co->order->isFullyPaid();
+                                        $paymentBadgeClass = match($paymentStatus) {
+                                            'paid' => 'bg-green-100 text-green-800',
+                                            'partially_paid' => 'bg-blue-100 text-blue-800',
+                                            'pending_verification' => 'bg-yellow-100 text-yellow-800',
+                                            'pending_cod' => 'bg-blue-100 text-blue-800',
+                                            default => 'bg-red-100 text-red-800',
+                                        };
+                                        $paymentLabel = match($paymentStatus) {
+                                            'paid' => 'Fully Paid',
+                                            'partially_paid' => 'Partially Paid',
+                                            'pending_verification' => 'Pending Verification',
+                                            'pending_cod' => 'Pending COD',
+                                            default => 'Unpaid',
+                                        };
+                                    @endphp
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $paymentBadgeClass }}">
+                                        {{ $paymentLabel }}
+                                    </span>
+                                @endif
                                 <a href="{{ route('customer.orders.show', $co->order->id) }}" class="text-xs text-yellow-700 hover:underline">View Details</a>
                             </div>
                         </div>

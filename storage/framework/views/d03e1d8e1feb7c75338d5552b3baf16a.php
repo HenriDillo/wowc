@@ -17,15 +17,23 @@
             <div class="flex items-center gap-3">
                 <?php 
                     $paymentStatus = $order->payment_status ?? 'unpaid';
-                    $canProcess = $paymentStatus === 'paid';
+                    $hasVerifiedPayment = $order->hasVerifiedPayment();
+                    $hasPendingVerification = $order->hasPendingPaymentVerification();
+                    $isRejected = $order->payment_status === 'payment_rejected' || ($order->getLatestPayment() && $order->getLatestPayment()->isRejected());
                 ?>
                 <span class="inline-flex px-3 py-1.5 rounded-lg text-sm font-medium
-                    <?php if($paymentStatus === 'paid'): ?> bg-green-100 text-green-800
-                    <?php elseif($paymentStatus === 'pending_verification'): ?> bg-yellow-100 text-yellow-800
+                    <?php if($paymentStatus === 'paid' && $hasVerifiedPayment): ?> bg-green-100 text-green-800
+                    <?php elseif($paymentStatus === 'partially_paid'): ?> bg-blue-100 text-blue-800
+                    <?php elseif($paymentStatus === 'pending_verification' || $hasPendingVerification): ?> bg-yellow-100 text-yellow-800
+                    <?php elseif($paymentStatus === 'pending_cod'): ?> bg-blue-100 text-blue-800
+                    <?php elseif($paymentStatus === 'payment_rejected' || $isRejected): ?> bg-red-100 text-red-800
                     <?php else: ?> bg-red-100 text-red-800
                     <?php endif; ?>">
-                    <?php if($paymentStatus === 'paid'): ?> ✓ Payment Confirmed
-                    <?php elseif($paymentStatus === 'pending_verification'): ?> ⏳ Payment Pending Verification
+                    <?php if($paymentStatus === 'paid' && $hasVerifiedPayment): ?> ✓ Paid — Verified
+                    <?php elseif($paymentStatus === 'partially_paid'): ?> 💰 Partially Paid
+                    <?php elseif($paymentStatus === 'pending_verification' || $hasPendingVerification): ?> ⏳ Pending Payment Verification
+                    <?php elseif($paymentStatus === 'pending_cod'): ?> 💰 Pending COD
+                    <?php elseif($paymentStatus === 'payment_rejected' || $isRejected): ?> ✗ Payment Rejected
                     <?php else: ?> ✗ Payment Unpaid
                     <?php endif; ?>
                 </span>
@@ -79,13 +87,22 @@
                 </div>
             </div>
         <?php endif; ?>
-        <?php if(!$canProcess): ?>
+        <?php
+            $hasVerifiedPayment = $order->hasVerifiedPayment();
+            $hasPendingVerification = $order->hasPendingPaymentVerification();
+            $isCod = $order->payment_method === 'COD';
+            // COD orders can be updated (except completed status if not paid), non-COD orders need verified payment
+            $canUpdateStatus = $isCod || $hasVerifiedPayment || $order->payment_status === 'paid';
+        ?>
+        <?php if(!$canUpdateStatus): ?>
             <div class="mb-6 rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
                 <div class="flex items-start gap-3">
                     <div class="text-red-700 font-semibold">⚠ Payment Required</div>
                     <div class="text-sm text-red-700 flex-1">
-                        <?php if($paymentStatus === 'pending_verification'): ?>
+                        <?php if($hasPendingVerification || $paymentStatus === 'pending_verification'): ?>
                             This order is awaiting admin verification of bank transfer proof. Until verified, processing actions are limited.
+                        <?php elseif($paymentStatus === 'payment_rejected'): ?>
+                            Payment was rejected. Please verify the payment or contact the customer.
                         <?php else: ?>
                             This order has not been paid yet. Customer must complete payment before processing can begin.
                         <?php endif; ?>
@@ -110,30 +127,52 @@
             </div>
         <?php endif; ?>
 
-        <!-- Status Update Form (only if paid) -->
-        <?php if($canProcess): ?>
+        <!-- Status Update Form (COD orders can always update, non-COD need verified payment) -->
+        <?php
+            $hasVerifiedPayment = $order->hasVerifiedPayment();
+            $isCod = $order->payment_method === 'COD';
+            // COD orders can be updated (except completed if not paid), non-COD orders need verified payment
+            $canUpdateStatus = $isCod || $hasVerifiedPayment || $order->payment_status === 'paid';
+        ?>
+        <?php if($canUpdateStatus): ?>
             <form method="POST" action="<?php echo e(route('employee.orders.update', $order->id)); ?>" class="mb-6 flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-100">
                 <?php echo csrf_field(); ?>
                 <?php echo method_field('PUT'); ?>
                 <label class="text-sm font-medium text-blue-900">Update Status:</label>
                 <select name="status" class="rounded-md border border-gray-300 text-sm px-3 py-2">
                     <?php 
-                        $statuses = match($order->order_type) {
-                            'standard' => ['pending', 'processing', 'ready_to_ship', 'shipped', 'delivered', 'completed', 'cancelled'],
-                            'backorder' => ['pending', 'processing', 'ready_to_ship', 'shipped', 'delivered', 'completed', 'cancelled'],
-                            'custom' => ['pending', 'in_design', 'in_production', 'ready_to_ship', 'shipped', 'delivered', 'completed', 'cancelled'],
-                            default => ['pending', 'processing', 'completed', 'cancelled']
-                        };
+                        // Get valid next statuses (forward-only flow)
+                        $validNextStatuses = $order->getValidNextStatuses();
+                        // Always include current status
+                        $availableStatuses = array_unique(array_merge([$order->status], $validNextStatuses));
                     ?>
-                    <?php $__currentLoopData = $statuses; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $s): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                        <option value="<?php echo e($s); ?>" <?php if($order->status===$s): echo 'selected'; endif; ?>><?php echo e(ucwords(str_replace('_',' ',$s))); ?></option>
+                    <?php $__currentLoopData = $availableStatuses; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $s): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                        <?php
+                            // Disable "completed" for COD orders if payment hasn't been collected
+                            $disabled = ($s === 'completed' && $isCod && $order->payment_status === 'pending_cod');
+                            $isCurrentStatus = ($s === $order->status);
+                        ?>
+                        <option value="<?php echo e($s); ?>" <?php if($isCurrentStatus): echo 'selected'; endif; ?> <?php if($disabled): echo 'disabled'; endif; ?>>
+                            <?php echo e(ucwords(str_replace('_',' ',$s))); ?>
+
+                            <?php if($isCurrentStatus): ?> (Current) <?php endif; ?>
+                            <?php if($disabled): ?> (Payment Required) <?php endif; ?>
+                        </option>
                     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                 </select>
                 <button type="submit" class="px-4 py-2 rounded-md text-white font-medium" style="background:#c59d5f;">Update</button>
             </form>
         <?php else: ?>
             <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <p class="text-sm text-gray-600">Status update available after payment confirmation.</p>
+                <p class="text-sm text-gray-600">
+                    <?php if($order->hasPendingPaymentVerification()): ?>
+                        Status update available after payment verification is completed.
+                    <?php elseif($order->payment_status === 'payment_rejected'): ?>
+                        Status update unavailable. Payment was rejected.
+                    <?php else: ?>
+                        Status update available after payment confirmation.
+                    <?php endif; ?>
+                </p>
             </div>
         <?php endif; ?>
 
@@ -237,84 +276,172 @@
                                                 </div>
                                             <?php endif; ?>
 
-                                            <form method="POST" action="<?php echo e(route('employee.custom-orders.update', $customOrder->id)); ?>" class="space-y-4">
-                                                <?php echo csrf_field(); ?>
-                                                <?php echo method_field('PUT'); ?>
-                                                <div>
-                                                    <label for="price_estimate_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Final Price</label>
-                                                    <input type="number" min="0" step="0.01" id="price_estimate_<?php echo e($customOrder->id); ?>" name="price_estimate" value="<?php echo e(old('price_estimate', $customOrder->price_estimate)); ?>" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
-                                                    <?php $__errorArgs = ['price_estimate'];
+                                            <?php if($customOrder->status === \App\Models\CustomOrder::STATUS_PENDING_REVIEW): ?>
+                                                <!-- Accept Order Form -->
+                                                <form method="POST" action="<?php echo e(route('employee.custom-orders.accept', $customOrder->id)); ?>" class="space-y-4 border-b border-gray-200 pb-4">
+                                                    <?php echo csrf_field(); ?>
+                                                    <h4 class="text-sm font-semibold text-green-700 mb-2">Accept Order</h4>
+                                                    
+                                                    <div>
+                                                        <label for="accept_price_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Price <span class="text-red-500">*</span></label>
+                                                        <input type="number" min="0" step="0.01" id="accept_price_<?php echo e($customOrder->id); ?>" name="price_estimate" value="<?php echo e(old('price_estimate', $customOrder->price_estimate)); ?>" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
+                                                        <?php $__errorArgs = ['price_estimate'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?>
-                                                        <p class="mt-1 text-xs text-red-600"><?php echo e($message); ?></p>
-                                                    <?php unset($message);
+                                                            <p class="mt-1 text-xs text-red-600"><?php echo e($message); ?></p>
+                                                        <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>
-                                                </div>
-                                                <div>
-                                                    <label for="admin_notes_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Internal Notes</label>
-                                                    <textarea id="admin_notes_<?php echo e($customOrder->id); ?>" name="admin_notes" rows="4" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]"><?php echo e(old('admin_notes', $customOrder->admin_notes)); ?></textarea>
-                                                    <?php $__errorArgs = ['admin_notes'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?>
-                                                        <p class="mt-1 text-xs text-red-600"><?php echo e($message); ?></p>
-                                                    <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>
-                                                </div>
-                                                <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-semibold shadow-sm hover:opacity-95 w-full md:w-auto" style="background:#c59d5f;">
-                                                    Save Review (Keep Pending)
-                                                </button>
-                                            </form>
+                                                    </div>
 
-                                            <form method="POST" action="<?php echo e(route('employee.custom-orders.confirm', $customOrder->id)); ?>" class="space-y-4 border-t border-gray-100 pt-4 mt-4">
-                                                <?php echo csrf_field(); ?>
-                                                <?php echo method_field('PUT'); ?>
-                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
-                                                        <label for="confirm_price_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Confirmed Price</label>
-                                                        <input type="number" min="0" step="0.01" id="confirm_price_<?php echo e($customOrder->id); ?>" name="price_estimate" value="<?php echo e(old('price_estimate', $customOrder->price_estimate)); ?>" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
-                                                    </div>
-                                                    <?php $__errorArgs = ['price_estimate'];
+                                                        <label for="accept_completion_date_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Expected Completion Date <span class="text-red-500">*</span></label>
+                                                        <input type="date" id="accept_completion_date_<?php echo e($customOrder->id); ?>" name="estimated_completion_date" value="<?php echo e(old('estimated_completion_date', optional($customOrder->estimated_completion_date)->format('Y-m-d'))); ?>" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
+                                                        <?php $__errorArgs = ['estimated_completion_date'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?>
-                                                        <p class="mt-1 text-xs text-red-600"><?php echo e($message); ?></p>
+                                                            <p class="mt-1 text-xs text-red-600"><?php echo e($message); ?></p>
+                                                        <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                                                    </div>
+
+                                                    <div>
+                                                        <label for="accept_admin_notes_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Internal Notes (Optional)</label>
+                                                        <textarea id="accept_admin_notes_<?php echo e($customOrder->id); ?>" name="admin_notes" rows="3" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]"><?php echo e(old('admin_notes', $customOrder->admin_notes)); ?></textarea>
+                                                    </div>
+
+                                                    <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-semibold shadow-sm hover:opacity-95 w-full" style="background:#2f855a;">
+                                                        ✓ Accept Order
+                                                    </button>
+                                                    <p class="text-xs text-gray-500 mt-1">Status will update to "Accepted / Pending Payment"</p>
+                                                </form>
+
+                                                <!-- Reject Order Form -->
+                                                <form method="POST" action="<?php echo e(route('employee.custom-orders.reject', $customOrder->id)); ?>" class="space-y-4 mt-4">
+                                                    <?php echo csrf_field(); ?>
+                                                    <h4 class="text-sm font-semibold text-red-700 mb-2">Reject Order</h4>
+                                                    
+                                                    <div>
+                                                        <label for="rejection_note_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Rejection Reason <span class="text-red-500">*</span></label>
+                                                        <textarea id="rejection_note_<?php echo e($customOrder->id); ?>" name="rejection_note" rows="4" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-red-500 focus:ring-red-500" placeholder="Please explain why this order is being rejected..." required><?php echo e(old('rejection_note', $customOrder->rejection_note)); ?></textarea>
+                                                        <p class="mt-1 text-xs text-gray-500">This note will be visible to the customer.</p>
+                                                        <?php $__errorArgs = ['rejection_note'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                                                            <p class="mt-1 text-xs text-red-600"><?php echo e($message); ?></p>
+                                                        <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                                                    </div>
+
+                                                    <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-semibold shadow-sm hover:opacity-95 w-full bg-red-600 hover:bg-red-700">
+                                                        ✗ Reject Order
+                                                    </button>
+                                                    <p class="text-xs text-gray-500 mt-1">Status will update to "Rejected"</p>
+                                                </form>
+                                            <?php elseif($customOrder->status === \App\Models\CustomOrder::STATUS_APPROVED): ?>
+                                                <div class="p-4 bg-green-50 border border-green-200 rounded-md">
+                                                    <p class="text-sm text-green-800 font-medium">✓ Order Accepted</p>
+                                                    <p class="text-xs text-green-700 mt-1">This order has been accepted and is awaiting payment.</p>
+                                                </div>
+                                            <?php elseif($customOrder->status === \App\Models\CustomOrder::STATUS_REJECTED): ?>
+                                                <div class="p-4 bg-red-50 border border-red-200 rounded-md">
+                                                    <p class="text-sm text-red-800 font-medium">✗ Order Rejected</p>
+                                                    <?php if($customOrder->rejection_note): ?>
+                                                        <p class="text-xs text-red-700 mt-2"><strong>Reason:</strong> <?php echo e($customOrder->rejection_note); ?></p>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <!-- Legacy forms for other statuses -->
+                                                <form method="POST" action="<?php echo e(route('employee.custom-orders.update', $customOrder->id)); ?>" class="space-y-4">
+                                                    <?php echo csrf_field(); ?>
+                                                    <?php echo method_field('PUT'); ?>
+                                                    <div>
+                                                        <label for="price_estimate_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Final Price</label>
+                                                        <input type="number" min="0" step="0.01" id="price_estimate_<?php echo e($customOrder->id); ?>" name="price_estimate" value="<?php echo e(old('price_estimate', $customOrder->price_estimate)); ?>" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
+                                                        <?php $__errorArgs = ['price_estimate'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                                                            <p class="mt-1 text-xs text-red-600"><?php echo e($message); ?></p>
+                                                        <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                                                    </div>
+                                                    <div>
+                                                        <label for="admin_notes_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Internal Notes</label>
+                                                        <textarea id="admin_notes_<?php echo e($customOrder->id); ?>" name="admin_notes" rows="4" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]"><?php echo e(old('admin_notes', $customOrder->admin_notes)); ?></textarea>
+                                                        <?php $__errorArgs = ['admin_notes'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                                                            <p class="mt-1 text-xs text-red-600"><?php echo e($message); ?></p>
+                                                        <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                                                    </div>
+                                                    <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-semibold shadow-sm hover:opacity-95 w-full md:w-auto" style="background:#c59d5f;">
+                                                        Save Review (Keep Pending)
+                                                    </button>
+                                                </form>
+
+                                                <form method="POST" action="<?php echo e(route('employee.custom-orders.confirm', $customOrder->id)); ?>" class="space-y-4 border-t border-gray-100 pt-4 mt-4">
+                                                    <?php echo csrf_field(); ?>
+                                                    <?php echo method_field('PUT'); ?>
+                                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label for="confirm_price_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Confirmed Price</label>
+                                                            <input type="number" min="0" step="0.01" id="confirm_price_<?php echo e($customOrder->id); ?>" name="price_estimate" value="<?php echo e(old('price_estimate', $customOrder->price_estimate)); ?>" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
+                                                        </div>
+                                                        <?php $__errorArgs = ['price_estimate'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                                                            <p class="mt-1 text-xs text-red-600"><?php echo e($message); ?></p>
+                                                        <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                                                        <div>
+                                                            <label for="estimated_completion_date_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Estimated Completion Date</label>
+                                                            <input type="date" id="estimated_completion_date_<?php echo e($customOrder->id); ?>" name="estimated_completion_date" value="<?php echo e(old('estimated_completion_date', optional($customOrder->estimated_completion_date)->format('Y-m-d'))); ?>" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
+                                                        </div>
+                                                    </div>
+                                                    <?php $__errorArgs = ['estimated_completion_date'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                                                        <p class="text-xs text-red-600"><?php echo e($message); ?></p>
                                                     <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>
                                                     <div>
-                                                        <label for="estimated_completion_date_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Estimated Completion Date</label>
-                                                        <input type="date" id="estimated_completion_date_<?php echo e($customOrder->id); ?>" name="estimated_completion_date" value="<?php echo e(old('estimated_completion_date', optional($customOrder->estimated_completion_date)->format('Y-m-d'))); ?>" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]" required>
+                                                        <label for="confirm_admin_notes_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Internal Notes (Optional)</label>
+                                                        <textarea id="confirm_admin_notes_<?php echo e($customOrder->id); ?>" name="admin_notes" rows="3" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]"><?php echo e(old('admin_notes', $customOrder->admin_notes)); ?></textarea>
                                                     </div>
-                                                </div>
-                                                <?php $__errorArgs = ['estimated_completion_date'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?>
-                                                    <p class="text-xs text-red-600"><?php echo e($message); ?></p>
-                                                <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>
-                                                <div>
-                                                    <label for="confirm_admin_notes_<?php echo e($customOrder->id); ?>" class="block text-sm font-medium text-gray-700">Internal Notes (Optional)</label>
-                                                    <textarea id="confirm_admin_notes_<?php echo e($customOrder->id); ?>" name="admin_notes" rows="3" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]"><?php echo e(old('admin_notes', $customOrder->admin_notes)); ?></textarea>
-                                                </div>
-                                                <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-semibold shadow-sm hover:opacity-95 w-full md:w-auto" style="background:#2f855a;">
-                                                    Confirm &amp; Start Production
-                                                </button>
-                                                <p class="text-xs text-gray-500">Confirmation sets status to In Progress and updates dashboards.</p>
-                                            </form>
+                                                    <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-semibold shadow-sm hover:opacity-95 w-full md:w-auto" style="background:#2f855a;">
+                                                        Confirm &amp; Start Production
+                                                    </button>
+                                                    <p class="text-xs text-gray-500">Confirmation sets status to In Progress and updates dashboards.</p>
+                                                </form>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
@@ -341,7 +468,7 @@ unset($__errorArgs, $__bag); ?>
                                                     <div class="text-blue-600">Expected Restock: <?php echo e(\Carbon\Carbon::parse($oi->item->restock_date)->format('M d, Y')); ?></div>
                                                 <?php endif; ?>
                                             </div>
-                                            <?php if($canProcess): ?>
+                                            <?php if($canUpdateStatus): ?>
                                                 <?php if($oi->backorder_status === \App\Models\OrderItem::BO_PENDING || !$oi->backorder_status): ?>
                                                     <div class="mt-2 flex items-center gap-2 flex-wrap">
                                                         <button onclick="updateItem(<?php echo e($order->id); ?>, <?php echo e($oi->id); ?>, 'in_progress')" class="px-3 py-1 rounded bg-yellow-100 text-yellow-800 text-xs font-medium hover:bg-yellow-200">→ In Progress</button>
@@ -406,14 +533,10 @@ unset($__errorArgs, $__bag); ?>
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Carrier</label>
-                                    <select name="carrier" class="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#c59d5f] focus:ring-[#c59d5f]">
-                                        <option value="">Select Carrier</option>
-                                        <option value="lalamove" <?php if(($order->carrier ?? '') === 'lalamove'): echo 'selected'; endif; ?>>Lalamove</option>
-                                        <option value="jnt" <?php if(($order->carrier ?? '') === 'jnt'): echo 'selected'; endif; ?>>J&T Express</option>
-                                        <option value="ninjavan" <?php if(($order->carrier ?? '') === 'ninjavan'): echo 'selected'; endif; ?>>Ninja Van</option>
-                                        <option value="2go" <?php if(($order->carrier ?? '') === '2go'): echo 'selected'; endif; ?>>2GO</option>
-                                        <option value="pickup" <?php if(($order->carrier ?? '') === 'pickup'): echo 'selected'; endif; ?>>Customer Pickup</option>
-                                    </select>
+                                    <div class="w-full rounded-md border border-gray-300 px-3 py-2 bg-gray-50 text-gray-700">
+                                        LBC (Automatically Set)
+                                    </div>
+                                    <input type="hidden" name="carrier" value="lbc">
                                 </div>
                             </div>
                             <?php if($order->status === 'ready_to_ship'): ?>
@@ -443,41 +566,240 @@ unset($__errorArgs, $__bag); ?>
             </div>
 
             <div class="space-y-6">
-                <!-- Payment Card -->
+                <!-- Payment Verification Card -->
                 <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                    <h2 class="font-semibold text-gray-900 mb-3">Payment Details</h2>
-                    <div class="space-y-3 text-sm text-gray-700">
-                        <div class="flex justify-between">
-                            <span class="text-gray-600">Method:</span>
-                            <span class="font-medium">
-                                <?php if($order->payment_method === 'gcash'): ?>
-                                    GCash
-                                <?php elseif($order->payment_method === 'bank'): ?>
-                                    Bank Transfer
-                                <?php else: ?>
-                                    <?php echo e(ucfirst($order->payment_method ?? 'N/A')); ?>
-
-                                <?php endif; ?>
-                            </span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-600">Status:</span>
-                            <span class="font-medium inline-flex px-2 py-0.5 rounded-full text-xs
-                                <?php if($paymentStatus === 'paid'): ?> bg-green-100 text-green-800
-                                <?php elseif($paymentStatus === 'partially_paid'): ?> bg-blue-100 text-blue-800
-                                <?php elseif($paymentStatus === 'pending_verification'): ?> bg-yellow-100 text-yellow-800
-                                <?php else: ?> bg-red-100 text-red-800
-                                <?php endif; ?>">
-                                <?php if($paymentStatus === 'paid'): ?> ✓ Fully Paid
-                                <?php elseif($paymentStatus === 'partially_paid'): ?> 💰 Partially Paid
-                                <?php elseif($paymentStatus === 'pending_verification'): ?> ⏳ Pending Verification
-                                <?php else: ?> ✗ Unpaid
-                                <?php endif; ?>
-                            </span>
-                        </div>
+                    <h2 class="font-semibold text-gray-900 mb-3">Payment Verification</h2>
+                    <?php
+                        $latestPayment = $order->getLatestPayment();
+                        $isRejected = $latestPayment && $latestPayment->isRejected();
                         
+                        // Calculate required amount
+                        $requiredAmount = 0;
+                        if ($order->order_type === 'mixed' && $order->childOrders()->exists()) {
+                            $requiredAmount = $order->calculateRequiredPaymentForMixedOrder();
+                        } else {
+                            $requiredAmount = $order->required_payment_amount ?? $order->calculateRequiredPaymentAmount();
+                        }
+                    ?>
+                    
+                    <div class="space-y-4">
+                        <!-- Payment Method & Status -->
+                        <div class="space-y-3 text-sm text-gray-700">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Method:</span>
+                                <span class="font-medium">
+                                    <?php if($order->payment_method === 'gcash' || ($latestPayment && $latestPayment->method === 'gcash')): ?>
+                                        GCash
+                                    <?php elseif($order->payment_method === 'bank' || ($latestPayment && $latestPayment->method === 'bank')): ?>
+                                        Bank Transfer
+                                    <?php elseif($order->payment_method === 'COD'): ?>
+                                        COD
+                                    <?php else: ?>
+                                        <?php echo e(ucfirst($order->payment_method ?? 'N/A')); ?>
+
+                                    <?php endif; ?>
+                                </span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Status:</span>
+                                <span class="font-medium inline-flex px-2 py-0.5 rounded-full text-xs
+                                    <?php if($paymentStatus === 'paid' && $hasVerifiedPayment): ?> bg-green-100 text-green-800
+                                    <?php elseif($paymentStatus === 'partially_paid'): ?> bg-blue-100 text-blue-800
+                                    <?php elseif($paymentStatus === 'pending_verification' || $hasPendingVerification): ?> bg-yellow-100 text-yellow-800
+                                    <?php elseif($paymentStatus === 'payment_rejected' || $isRejected): ?> bg-red-100 text-red-800
+                                    <?php else: ?> bg-gray-100 text-gray-800
+                                    <?php endif; ?>">
+                                    <?php if($paymentStatus === 'paid' && $hasVerifiedPayment): ?> ✓ Paid — Verified
+                                    <?php elseif($paymentStatus === 'partially_paid'): ?> 💰 Partially Paid
+                                    <?php elseif($paymentStatus === 'pending_verification' || $hasPendingVerification): ?> ⏳ Pending Payment Verification
+                                    <?php elseif($paymentStatus === 'pending_cod'): ?> 💰 Pending COD
+                                    <?php elseif($paymentStatus === 'payment_rejected' || $isRejected): ?> ✗ Payment Rejected
+                                    <?php else: ?> ✗ Unpaid
+                                    <?php endif; ?>
+                                </span>
+                            </div>
+                        </div>
+
+                        <?php if($latestPayment): ?>
+                            <!-- Payment Details -->
+                            <div class="border-t border-gray-200 pt-3 space-y-3">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600 font-medium">Required Amount:</span>
+                                    <span class="font-semibold text-gray-900">₱<?php echo e(number_format($requiredAmount, 2)); ?></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600 font-medium">Customer Paid Amount:</span>
+                                    <span class="font-semibold <?php if(abs($latestPayment->amount - $requiredAmount) < 0.01): ?> text-green-700 <?php else: ?> text-red-700 <?php endif; ?>">
+                                        ₱<?php echo e(number_format($latestPayment->amount, 2)); ?>
+
+                                    </span>
+                                </div>
+                                <?php if($latestPayment->transaction_id): ?>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Reference Number:</span>
+                                        <span class="font-medium"><?php echo e($latestPayment->transaction_id); ?></span>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if($latestPayment->proof_image): ?>
+                                    <div>
+                                        <span class="text-gray-600 block mb-2">Proof of Payment:</span>
+                                        <a href="<?php echo e(Storage::url($latestPayment->proof_image)); ?>" target="_blank" class="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                            </svg>
+                                            View/Download Proof
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
+                                
+                                <?php if($latestPayment->verifier): ?>
+                                    <div class="border-t border-gray-200 pt-3">
+                                        <div class="text-xs text-gray-500">
+                                            Verified by: <span class="font-medium text-gray-700"><?php echo e($latestPayment->verifier->name ?? 'N/A'); ?></span>
+                                            <?php if($latestPayment->verified_at): ?>
+                                                on <?php echo e($latestPayment->verified_at->format('M d, Y g:i A')); ?>
+
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if($latestPayment->verification_notes): ?>
+                                            <div class="mt-2 text-xs">
+                                                <span class="text-gray-500">Notes:</span>
+                                                <p class="text-gray-700 mt-1"><?php echo e($latestPayment->verification_notes); ?></p>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <!-- COD Details -->
+                        <?php
+                            $isCod = $order->payment_method === 'COD';
+                        ?>
+                        <?php if($isCod): ?>
+                            <div class="border-t border-gray-200 pt-3 space-y-3">
+                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <p class="text-sm font-medium text-blue-900 mb-2">📦 COD Order Details</p>
+                                    <?php if($order->recipient_name): ?>
+                                        <div class="text-xs text-blue-800 mb-1">
+                                            <span class="font-medium">Recipient:</span> <?php echo e($order->recipient_name); ?>
+
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if($order->recipient_phone): ?>
+                                        <div class="text-xs text-blue-800 mb-1">
+                                            <span class="font-medium">Contact:</span> <?php echo e($order->recipient_phone); ?>
+
+                                        </div>
+                                    <?php endif; ?>
+                                    <div class="text-xs text-blue-800 mb-1">
+                                        <span class="font-medium">Shipping Address:</span> <?php echo e($order->user->address->address_line ?? 'N/A'); ?>, <?php echo e($order->user->address->city ?? ''); ?>, <?php echo e($order->user->address->province ?? ''); ?>
+
+                                    </div>
+                                </div>
+                                
+                                <div class="space-y-2">
+                                    <div class="flex justify-between text-sm">
+                                        <span class="text-gray-600">Order Amount:</span>
+                                        <span class="font-medium">₱<?php echo e(number_format($order->total_amount - ($order->shipping_fee ?? 0) - ($order->cod_fee ?? 0), 2)); ?></span>
+                                    </div>
+                                    <?php if($order->shipping_fee > 0): ?>
+                                        <div class="flex justify-between text-sm">
+                                            <span class="text-gray-600">Shipping Fee (LBC):</span>
+                                            <span class="font-medium">₱<?php echo e(number_format($order->shipping_fee, 2)); ?></span>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if($order->cod_fee > 0): ?>
+                                        <div class="flex justify-between text-sm">
+                                            <span class="text-gray-600">COD Fee:</span>
+                                            <span class="font-medium">₱<?php echo e(number_format($order->cod_fee, 2)); ?></span>
+                                        </div>
+                                    <?php endif; ?>
+                                    <div class="flex justify-between text-sm font-semibold pt-2 border-t">
+                                        <span class="text-gray-900">Total COD Amount:</span>
+                                        <span class="text-blue-900">₱<?php echo e(number_format($order->total_amount, 2)); ?></span>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <!-- Verification Actions -->
+                        <?php if($hasPendingVerification): ?>
+                            <div class="border-t border-gray-200 pt-4">
+                                <form method="POST" action="<?php echo e(route('employee.orders.verify-payment', $order->id)); ?>" id="verifyPaymentForm" class="space-y-4">
+                                    <?php echo csrf_field(); ?>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Verification Action:</label>
+                                        <div class="space-y-2">
+                                            <label class="flex items-center">
+                                                <input type="radio" name="action" value="approve" class="mr-2" required>
+                                                <span class="text-sm text-green-700 font-medium">✓ Approve Payment</span>
+                                            </label>
+                                            <label class="flex items-center">
+                                                <input type="radio" name="action" value="reject" class="mr-2" required>
+                                                <span class="text-sm text-red-700 font-medium">✗ Reject Payment</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div id="rejectionNotes" class="hidden">
+                                        <label for="verification_notes" class="block text-sm font-medium text-gray-700 mb-1">
+                                            Rejection Reason <span class="text-red-500">*</span>
+                                        </label>
+                                        <textarea 
+                                            id="verification_notes" 
+                                            name="verification_notes" 
+                                            rows="3" 
+                                            class="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-red-500 focus:ring-red-500"
+                                            placeholder="Please explain why the payment is being rejected..."
+                                        ></textarea>
+                                        <p class="mt-1 text-xs text-gray-500">This note will be visible to the customer.</p>
+                                    </div>
+                                    <button type="submit" class="w-full px-4 py-2 rounded-md text-white font-medium hover:opacity-95 transition-opacity" style="background:#c59d5f;">
+                                        Verify Payment
+                                    </button>
+                                </form>
+                            </div>
+                        <?php elseif($hasVerifiedPayment): ?>
+                            <div class="border-t border-gray-200 pt-3">
+                                <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                                    <p class="text-sm text-green-800 font-medium">✓ Payment Verified</p>
+                                    <p class="text-xs text-green-700 mt-1">Payment has been verified and approved. Order can proceed to processing.</p>
+                                </div>
+                            </div>
+                        <?php elseif($paymentStatus === 'pending_cod'): ?>
+                            <div class="border-t border-gray-200 pt-4">
+                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                                    <p class="text-sm text-blue-800 font-medium">💰 COD Payment Pending</p>
+                                    <p class="text-xs text-blue-700 mt-1">This order can proceed to processing. Payment will be collected upon delivery via LBC. Mark as collected once payment is received to complete the order.</p>
+                                </div>
+                                <form method="POST" action="<?php echo e(route('employee.orders.collect-cod', $order->id)); ?>" onsubmit="return confirm('Mark this COD order as collected? This will update the payment status to paid.');">
+                                    <?php echo csrf_field(); ?>
+                                    <button type="submit" class="w-full px-4 py-2 rounded-md text-white font-medium hover:opacity-95 transition-opacity bg-green-600 hover:bg-green-700">
+                                        ✓ Mark COD as Collected
+                                    </button>
+                                </form>
+                            </div>
+                        <?php elseif($isRejected): ?>
+                            <div class="border-t border-gray-200 pt-3">
+                                <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                                    <p class="text-sm text-red-800 font-medium">✗ Payment Rejected</p>
+                                    <?php if($latestPayment->verification_notes): ?>
+                                        <p class="text-xs text-red-700 mt-1"><strong>Reason:</strong> <?php echo e($latestPayment->verification_notes); ?></p>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php elseif(!$latestPayment): ?>
+                            <div class="border-t border-gray-200 pt-3">
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                    <p class="text-sm text-gray-700">No payment has been submitted yet.</p>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <!-- Payment Summary -->
                         <?php if($paymentStatus === 'partially_paid'): ?>
-                            <div class="border-t border-gray-200 pt-2 space-y-2">
+                            <div class="border-t border-gray-200 pt-3 space-y-2">
                                 <div class="flex justify-between">
                                     <span class="text-gray-600">Total Order Amount:</span>
                                     <span class="font-medium">₱<?php echo e(number_format($order->total_amount, 2)); ?></span>
@@ -492,7 +814,7 @@ unset($__errorArgs, $__bag); ?>
                                 </div>
                             </div>
                         <?php else: ?>
-                            <div class="border-t border-gray-200 pt-2 flex justify-between font-semibold">
+                            <div class="border-t border-gray-200 pt-3 flex justify-between font-semibold">
                                 <span>Total:</span>
                                 <span>₱<?php echo e(number_format($order->total_amount, 2)); ?></span>
                             </div>
@@ -508,12 +830,10 @@ unset($__errorArgs, $__bag); ?>
                             <div class="text-gray-600 mb-1">Shipping Method</div>
                             <div class="font-medium">Standard Delivery</div>
                         </div>
-                        <?php if($order->carrier): ?>
-                            <div>
-                                <div class="text-gray-600 mb-1">Carrier</div>
-                                <div class="font-medium capitalize"><?php echo e(str_replace('_', ' ', $order->carrier)); ?></div>
-                            </div>
-                        <?php endif; ?>
+                        <div>
+                            <div class="text-gray-600 mb-1">Carrier</div>
+                            <div class="font-medium">LBC</div>
+                        </div>
                         <?php if($order->tracking_number): ?>
                             <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
                                 <div class="text-gray-600 text-xs mb-1">Tracking Number</div>
@@ -583,6 +903,31 @@ unset($__errorArgs, $__bag); ?>
             </div>
         </div>
     </div>
+
+    <script>
+        // Toggle rejection notes field based on action selection
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('verifyPaymentForm');
+            if (form) {
+                const actionRadios = form.querySelectorAll('input[name="action"]');
+                const rejectionNotes = document.getElementById('rejectionNotes');
+                const notesTextarea = document.getElementById('verification_notes');
+                
+                actionRadios.forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        if (this.value === 'reject') {
+                            rejectionNotes.classList.remove('hidden');
+                            notesTextarea.setAttribute('required', 'required');
+                        } else {
+                            rejectionNotes.classList.add('hidden');
+                            notesTextarea.removeAttribute('required');
+                            notesTextarea.value = '';
+                        }
+                    });
+                });
+            }
+        });
+    </script>
 
 <?php $__env->stopSection(); ?>
 

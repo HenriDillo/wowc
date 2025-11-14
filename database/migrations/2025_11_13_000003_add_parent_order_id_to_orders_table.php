@@ -25,7 +25,7 @@ return new class extends Migration
     {
         Schema::table('orders', function (Blueprint $table) {
             if (Schema::hasColumn('orders', 'parent_order_id')) {
-                $table->dropForeignKeyIfExists(['parent_order_id']);
+                $table->dropForeign(['parent_order_id']);
                 $table->dropColumn('parent_order_id');
             }
         });

@@ -28,12 +28,18 @@ class Order extends Model
         'tracking_number',
         'carrier',
         'delivered_at',
+        'recipient_name',
+        'recipient_phone',
+        'shipping_fee',
+        'cod_fee',
     ];
 
     protected $casts = [
         'total_amount' => 'decimal:2',
         'required_payment_amount' => 'decimal:2',
         'remaining_balance' => 'decimal:2',
+        'shipping_fee' => 'decimal:2',
+        'cod_fee' => 'decimal:2',
         'expected_restock_date' => 'date',
         'delivered_at' => 'datetime',
     ];
@@ -165,8 +171,164 @@ class Order extends Model
 			'paid' => 'Fully Paid ✓',
 			'partially_paid' => 'Partially Paid',
 			'pending_verification' => 'Pending Verification',
+			'pending_cod' => 'Pending COD',
+			'payment_rejected' => 'Payment Rejected',
 			default => 'Unpaid',
 		};
+	}
+
+	/**
+	 * Check if order has verified payment
+	 * For mixed orders, checks all child orders
+	 */
+	public function hasVerifiedPayment(): bool
+	{
+		if ($this->order_type === 'mixed' && $this->childOrders()->exists()) {
+			// For mixed orders, all child orders must have verified payments
+			foreach ($this->childOrders as $child) {
+				if (!$child->hasVerifiedPayment()) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		// For COD orders, check if payment has been collected
+		$isCod = $this->payment_method === 'COD';
+		if ($isCod) {
+			return $this->payment_status === 'paid';
+		}
+
+		// Check if there's a payment with approved verification
+		$latestPayment = $this->payments()->latest()->first();
+		if (!$latestPayment) {
+			return false;
+		}
+
+		// For both bank transfers and GCash, check verification status
+		return $latestPayment->isVerified();
+	}
+
+	/**
+	 * Check if order has pending payment verification
+	 */
+	public function hasPendingPaymentVerification(): bool
+	{
+		if ($this->order_type === 'mixed' && $this->childOrders()->exists()) {
+			// Check if any child order has pending verification
+			foreach ($this->childOrders as $child) {
+				if ($child->hasPendingPaymentVerification()) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		$latestPayment = $this->payments()->latest()->first();
+		if (!$latestPayment) {
+			return false;
+		}
+
+		// For both bank transfers and GCash, check if pending verification
+		return $latestPayment->isPendingVerification();
+	}
+
+	/**
+	 * Get the latest payment for this order
+	 */
+	public function getLatestPayment(): ?Payment
+	{
+		return $this->payments()->latest()->first();
+	}
+
+	/**
+	 * Calculate required payment amount for mixed orders
+	 */
+	public function calculateRequiredPaymentForMixedOrder(): float
+	{
+		if ($this->order_type !== 'mixed' || !$this->childOrders()->exists()) {
+			return $this->calculateRequiredPaymentAmount();
+		}
+
+		$total = 0.0;
+		foreach ($this->childOrders as $child) {
+			if ($child->order_type === 'standard') {
+				$total += $child->total_amount; // 100% of standard
+			} else {
+				$total += $child->total_amount * 0.5; // 50% of backorder
+			}
+		}
+		return $total;
+	}
+
+	/**
+	 * Get valid next statuses based on current status and order type
+	 * Implements forward-only status flow
+	 */
+	public function getValidNextStatuses(): array
+	{
+		$currentStatus = $this->status;
+		
+		// Define status flows for each order type
+		$statusFlows = [
+			'standard' => [
+				'pending' => ['processing', 'cancelled'],
+				'processing' => ['ready_to_ship', 'cancelled'],
+				'ready_to_ship' => ['shipped', 'cancelled'],
+				'shipped' => ['delivered', 'cancelled'],
+				'delivered' => ['completed'],
+				'completed' => [], // Terminal status
+				'cancelled' => [], // Terminal status
+			],
+			'backorder' => [
+				'pending' => ['processing', 'cancelled'],
+				'processing' => ['ready_to_ship', 'cancelled'],
+				'ready_to_ship' => ['shipped', 'cancelled'],
+				'shipped' => ['delivered', 'cancelled'],
+				'delivered' => ['completed'],
+				'completed' => [], // Terminal status
+				'cancelled' => [], // Terminal status
+			],
+			'custom' => [
+				'pending' => ['in_design', 'cancelled'],
+				'in_design' => ['in_production', 'cancelled'],
+				'in_production' => ['ready_for_delivery', 'cancelled'],
+				'ready_for_delivery' => ['ready_to_ship', 'cancelled'],
+				'ready_to_ship' => ['shipped', 'cancelled'],
+				'shipped' => ['delivered', 'cancelled'],
+				'delivered' => ['completed'],
+				'completed' => [], // Terminal status
+				'cancelled' => [], // Terminal status
+			],
+			'mixed' => [
+				'pending' => ['processing', 'cancelled'],
+				'processing' => ['ready_to_ship', 'cancelled'],
+				'ready_to_ship' => ['shipped', 'cancelled'],
+				'shipped' => ['delivered', 'cancelled'],
+				'delivered' => ['completed'],
+				'completed' => [], // Terminal status
+				'cancelled' => [], // Terminal status
+			],
+		];
+
+		$flow = $statusFlows[$this->order_type] ?? $statusFlows['standard'];
+		
+		// Return valid next statuses, or empty array if current status not found
+		return $flow[$currentStatus] ?? [];
+	}
+
+	/**
+	 * Check if a status transition is valid (forward-only)
+	 */
+	public function canTransitionTo(string $newStatus): bool
+	{
+		// Allow staying in the same status
+		if ($newStatus === $this->status) {
+			return true;
+		}
+
+		// Check if the new status is in the valid next statuses
+		return in_array($newStatus, $this->getValidNextStatuses());
 	}
 }
 

@@ -13,6 +13,7 @@ class Material extends Model
         'name',
         'unit',        
         'stock',
+        'reorder_level',
         'is_hidden',   
     ];
 
