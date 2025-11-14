@@ -18,6 +18,7 @@ class Item extends Model
         'description',
         'status',
         'restock_date',
+        'reorder_level',
     ];
 
     protected $casts = [

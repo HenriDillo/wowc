@@ -21,6 +21,7 @@ class CustomOrder extends Model
         'status',
         'admin_notes',
         'estimated_completion_date',
+        'rejection_note',
     ];
 
     protected $casts = [

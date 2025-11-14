@@ -21,6 +21,21 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 
 	<section class="pt-24 pb-16">
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            @if(session('success'))
+                <div class="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
+                    {{ session('success') }}
+                </div>
+            @endif
+            @if(session('error'))
+                <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                    {{ session('error') }}
+                </div>
+            @endif
+            @if(session('info'))
+                <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                    {{ session('info') }}
+                </div>
+            @endif
             <div class="mb-6">
 				<h1 class="text-2xl font-semibold text-gray-900">{{ request()->is('customer/*') ? 'Order Details' : 'Thank you for your order!' }}</h1>
 				<p class="mt-2 text-gray-600">Order <span class="font-medium text-gray-900">#{{ $order->id }}</span> • {{ $order->created_at?->format('M d, Y') }}</p>
@@ -92,15 +107,38 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                             default => 'bg-gray-100 text-gray-800',
                         };
                     @endphp
-                    <div class="mt-4 p-4 rounded-md border border-yellow-200 bg-yellow-50">
-                        <h3 class="font-medium text-yellow-900">Custom Order Status</h3>
-                        <div class="mt-2 text-sm text-yellow-800 space-y-1">
+                    <div class="mt-4 p-4 rounded-md border {{ $customOrder->status === 'rejected' ? 'border-red-200 bg-red-50' : ($customOrder->status === 'approved' ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50') }}">
+                        <h3 class="font-medium {{ $customOrder->status === 'rejected' ? 'text-red-900' : ($customOrder->status === 'approved' ? 'text-green-900' : 'text-yellow-900') }}">Custom Order Status</h3>
+                        <div class="mt-2 text-sm {{ $customOrder->status === 'rejected' ? 'text-red-800' : ($customOrder->status === 'approved' ? 'text-green-800' : 'text-yellow-800') }} space-y-2">
                             <p><strong>Status:</strong> <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $customStatusColor }}">{{ str_replace('_', ' ', ucfirst($customOrder->status)) }}</span></p>
-                            @if($customOrder->price_estimate)
-                                <p><strong>Price Estimate:</strong> ₱{{ number_format((float)$customOrder->price_estimate, 2) }}</p>
-                            @endif
-                            @if($customOrder->estimated_completion_date)
-                                <p><strong>Estimated Completion:</strong> {{ $customOrder->estimated_completion_date->format('M d, Y') }}</p>
+                            
+                            @if($customOrder->status === \App\Models\CustomOrder::STATUS_APPROVED)
+                                @if($customOrder->price_estimate)
+                                    <p><strong>Price:</strong> ₱{{ number_format((float)$customOrder->price_estimate, 2) }}</p>
+                                @endif
+                                @if($customOrder->estimated_completion_date)
+                                    <p><strong>Expected Completion Date:</strong> {{ $customOrder->estimated_completion_date->format('M d, Y') }}</p>
+                                @endif
+                                <p class="text-xs mt-2 italic">Your order has been accepted. Please proceed to payment to begin production.</p>
+                            @elseif($customOrder->status === \App\Models\CustomOrder::STATUS_REJECTED)
+                                @if($customOrder->rejection_note)
+                                    <div class="mt-2 p-3 bg-white border border-red-200 rounded-md">
+                                        <p class="font-semibold text-red-900 mb-1">Rejection Reason:</p>
+                                        <p class="text-red-800 whitespace-pre-line">{{ $customOrder->rejection_note }}</p>
+                                    </div>
+                                @endif
+                            @elseif($customOrder->status === \App\Models\CustomOrder::STATUS_PENDING_REVIEW)
+                                <p class="text-xs mt-2 italic">Your order is currently under review. We'll notify you once a decision has been made.</p>
+                                @if($customOrder->price_estimate)
+                                    <p><strong>Price Estimate:</strong> ₱{{ number_format((float)$customOrder->price_estimate, 2) }}</p>
+                                @endif
+                            @else
+                                @if($customOrder->price_estimate)
+                                    <p><strong>Price Estimate:</strong> ₱{{ number_format((float)$customOrder->price_estimate, 2) }}</p>
+                                @endif
+                                @if($customOrder->estimated_completion_date)
+                                    <p><strong>Estimated Completion:</strong> {{ $customOrder->estimated_completion_date->format('M d, Y') }}</p>
+                                @endif
                             @endif
                         </div>
                     </div>
@@ -124,6 +162,28 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                                     <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Quantity</div>
                                     <div class="mt-1 text-gray-900">{{ $customOrder->quantity }}</div>
                                 </div>
+                                
+                                @if($customOrder->status === \App\Models\CustomOrder::STATUS_APPROVED)
+                                    <div class="pt-4 border-t border-gray-200 space-y-2">
+                                        <div>
+                                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Price</div>
+                                            <div class="mt-1 text-gray-900 font-semibold text-lg">₱{{ number_format((float)$customOrder->price_estimate, 2) }}</div>
+                                        </div>
+                                        @if($customOrder->estimated_completion_date)
+                                            <div>
+                                                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Expected Completion Date</div>
+                                                <div class="mt-1 text-gray-900">{{ $customOrder->estimated_completion_date->format('M d, Y') }}</div>
+                                            </div>
+                                        @endif
+                                    </div>
+                                @elseif($customOrder->status === \App\Models\CustomOrder::STATUS_REJECTED && $customOrder->rejection_note)
+                                    <div class="pt-4 border-t border-gray-200">
+                                        <div class="p-3 bg-red-50 border border-red-200 rounded-md">
+                                            <div class="text-xs font-medium text-red-900 uppercase tracking-wide mb-2">Rejection Reason</div>
+                                            <div class="text-sm text-red-800 whitespace-pre-line">{{ $customOrder->rejection_note }}</div>
+                                        </div>
+                                    </div>
+                                @endif
                             </div>
                         </div>
 
@@ -149,13 +209,25 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                             @endif
                         </div>
 
-                        @if($customOrder->status === \App\Models\CustomOrder::STATUS_APPROVED && ($customOrder->order?->payment_status !== 'paid'))
+                        @if($customOrder->status === \App\Models\CustomOrder::STATUS_APPROVED)
                             <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                                 <h2 class="font-semibold text-gray-900">Payment</h2>
-                                <p class="mt-3 text-sm text-gray-700">Your custom order has been confirmed. Please complete payment to begin production.</p>
-                                <div class="mt-4">
-                                    <a href="{{ route('checkout.page', ['order_id' => $customOrder->order?->id]) }}" class="inline-flex items-center px-4 py-2 rounded-md text-white" style="background:#c59d5f;">Proceed to Checkout</a>
-                                </div>
+                                @if($customOrder->order && $customOrder->order->isFullyPaid())
+                                    <div class="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                                        <div class="flex items-center gap-2">
+                                            <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                            </svg>
+                                            <span class="text-sm font-medium text-green-800">Fully Paid</span>
+                                        </div>
+                                        <p class="mt-2 text-xs text-green-700">Your payment has been completed. Production will begin soon.</p>
+                                    </div>
+                                @else
+                                    <p class="mt-3 text-sm text-gray-700">Your custom order has been confirmed. Please complete payment to begin production.</p>
+                                    <div class="mt-4">
+                                        <a href="{{ route('checkout.page', ['order_id' => $customOrder->order?->id]) }}" class="inline-flex items-center px-4 py-2 rounded-md text-white font-medium hover:opacity-95 transition-opacity" style="background:#c59d5f;">Proceed to Checkout</a>
+                                    </div>
+                                @endif
                             </div>
                         @endif
                     @else
@@ -270,7 +342,10 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 								$method = 'GCash';
 							} elseif ($method === 'bank' || $method === 'Bank' || $method === 'Bank Transfer') {
 								$method = 'Bank Transfer';
+							} elseif ($method === 'COD') {
+								$method = 'COD';
 							}
+							$isCod = $order->payment_method === 'COD';
 						@endphp
 						<div class="mt-3 text-sm text-gray-700 space-y-1">
 							<div>Method: {{ $method }}</div>
@@ -278,24 +353,48 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 								Status: 
 								@php
 									$paymentStatus = $latestPayment?->status ?? $order->payment_status ?? '—';
-									$statusBadgeClass = match($paymentStatus) {
-										'paid' => 'bg-green-100 text-green-800',
-										'pending_verification' => 'bg-yellow-100 text-yellow-800',
-										'unpaid' => 'bg-red-100 text-red-800',
-										default => 'bg-gray-100 text-gray-800',
-									};
-									$statusLabel = match($paymentStatus) {
-										'paid' => 'Paid ✓',
-										'pending_verification' => 'Pending Verification',
-										'unpaid' => 'Unpaid',
-										default => ucfirst(str_replace('_', ' ', $paymentStatus)),
-									};
+									$isRejected = $latestPayment && $latestPayment->isRejected();
+									$isPendingVerification = $latestPayment && $latestPayment->isPendingVerification();
+									
+									// Check order payment status for rejection
+									if ($order->payment_status === 'payment_rejected' || $isRejected) {
+										$statusBadgeClass = 'bg-red-100 text-red-800';
+										$statusLabel = 'Payment Rejected';
+									} else {
+										$statusBadgeClass = match($paymentStatus) {
+											'paid' => 'bg-green-100 text-green-800',
+											'pending_verification' => 'bg-yellow-100 text-yellow-800',
+											'pending_cod' => 'bg-blue-100 text-blue-800',
+											'unpaid' => 'bg-red-100 text-red-800',
+											default => 'bg-gray-100 text-gray-800',
+										};
+										$statusLabel = match($paymentStatus) {
+											'paid' => 'Paid ✓',
+											'pending_verification' => 'Pending Verification',
+											'pending_cod' => 'Pending COD',
+											'unpaid' => 'Unpaid',
+											default => ucfirst(str_replace('_', ' ', $paymentStatus)),
+										};
+									}
 								@endphp
 								<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $statusBadgeClass }}">{{ $statusLabel }}</span>
 							</div>
-							@if($paymentStatus === 'pending_verification')
+							@if($isPendingVerification || $paymentStatus === 'pending_verification')
 								<div class="mt-2 p-2 bg-yellow-50 border border-yellow-100 rounded text-xs">
 									<p class="text-yellow-800">Your bank transfer proof is being verified by our team. We'll confirm payment shortly.</p>
+								</div>
+							@endif
+							@if($isRejected || $order->payment_status === 'payment_rejected')
+								<div class="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+									<p class="text-red-800 font-medium text-sm mb-1">✗ Payment Rejected</p>
+									@if($latestPayment && $latestPayment->verification_notes)
+										<p class="text-red-700 text-xs mt-1">
+											<strong>Reason:</strong> {{ $latestPayment->verification_notes }}
+										</p>
+									@else
+										<p class="text-red-700 text-xs mt-1">Your payment was rejected. Please contact support for more information.</p>
+									@endif
+									<p class="text-red-600 text-xs mt-2">Please submit a new payment or contact our support team for assistance.</p>
 								</div>
 							@endif
 							@if(!empty($latestPayment?->transaction_id))
@@ -304,7 +403,43 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 							@if(!empty($latestPayment?->proof_image))
 								<div><a href="{{ Storage::url($latestPayment->proof_image) }}" target="_blank" class="text-[#c59d5f] hover:underline">View Bank Proof</a></div>
 							@endif
-							<div class="pt-2 border-t mt-2 font-medium">Total: ₱{{ number_format($order->total_amount, 2) }}</div>
+							
+							@if($isCod)
+								<div class="pt-2 border-t mt-2 space-y-2">
+									@if($order->recipient_name)
+										<div>
+											<span class="text-gray-600">Recipient:</span>
+											<span class="font-medium">{{ $order->recipient_name }}</span>
+										</div>
+										@if($order->recipient_phone)
+											<div>
+												<span class="text-gray-600">Contact:</span>
+												<span class="font-medium">{{ $order->recipient_phone }}</span>
+											</div>
+										@endif
+									@endif
+									@if($order->shipping_fee > 0)
+										<div class="flex justify-between">
+											<span class="text-gray-600">Shipping Fee (LBC):</span>
+											<span class="font-medium">₱{{ number_format($order->shipping_fee, 2) }}</span>
+										</div>
+									@endif
+									@if($order->cod_fee > 0)
+										<div class="flex justify-between">
+											<span class="text-gray-600">COD Fee:</span>
+											<span class="font-medium">₱{{ number_format($order->cod_fee, 2) }}</span>
+										</div>
+									@endif
+									<div class="pt-2 border-t mt-2">
+										<p class="text-xs text-blue-700 mb-1">💡 Pay the total amount (items + shipping + COD fee) to LBC upon delivery.</p>
+									</div>
+								</div>
+							@endif
+							
+							<div class="pt-2 border-t mt-2 font-medium flex justify-between">
+								<span>Total:</span>
+								<span>₱{{ number_format($order->total_amount, 2) }}</span>
+							</div>
 						</div>
                     </div>
 

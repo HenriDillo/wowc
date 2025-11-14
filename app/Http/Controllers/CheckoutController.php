@@ -10,6 +10,8 @@ use App\Models\ItemStockTransaction;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Address;
+use App\Models\Payment;
+use App\Services\LbcShippingCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -24,8 +26,55 @@ class CheckoutController extends Controller
         }
 		// Optional: paying an existing order (e.g., confirmed custom order)
 		$payOrder = null;
+		$customOrder = null;
 		if (request()->filled('order_id')) {
-			$payOrder = \App\Models\Order::with(['user', 'customOrders'])->where('id', request('order_id'))->when($user, fn($q) => $q->where('user_id', $user->id))->first();
+			$orderId = request('order_id');
+			
+			// Validate order ID format
+			if (!is_numeric($orderId) || $orderId <= 0) {
+				return redirect()->route('customer.orders.index')
+					->with('error', 'Invalid order ID. Please try again.');
+			}
+			
+			// Load order with relationships
+			$payOrder = \App\Models\Order::with(['user', 'customOrders', 'payments'])
+				->where('id', $orderId)
+				->when($user, fn($q) => $q->where('user_id', $user->id))
+				->first();
+			
+			// Check if order exists
+			if (!$payOrder) {
+				return redirect()->route('customer.orders.index')
+					->with('error', 'Order not found. The order may not exist or you may not have permission to access it.');
+			}
+			
+			// Check if order is fully paid
+			if ($payOrder->isFullyPaid()) {
+				return redirect()->route('customer.orders.show', $payOrder->id)
+					->with('info', 'This order is already fully paid. No payment is required.');
+			}
+			
+			// For custom orders, validate custom order data
+			if ($payOrder->order_type === 'custom') {
+				$customOrder = $payOrder->customOrders->first();
+				
+				if (!$customOrder) {
+					return redirect()->route('customer.orders.index')
+						->with('error', 'Custom order details not found. Please contact support.');
+				}
+				
+				// Validate that custom order has a price set
+				if (!$customOrder->price_estimate || $customOrder->price_estimate <= 0) {
+					return redirect()->route('customer.orders.show', $payOrder->id)
+						->with('error', 'Custom order price has not been set yet. Please wait for employee review.');
+				}
+				
+				// Ensure custom order is approved
+				if ($customOrder->status !== \App\Models\CustomOrder::STATUS_APPROVED) {
+					return redirect()->route('customer.orders.show', $payOrder->id)
+						->with('error', 'This custom order is not yet approved for payment.');
+				}
+			}
 		}
 
 		$cart = Cart::where('status', 'active')
@@ -80,6 +129,7 @@ class CheckoutController extends Controller
             'isMixedOrder' => $isMixedOrder,
             'requiredPaymentAmount' => $requiredPaymentAmount,
 			'payOrder' => $payOrder,
+			'customOrder' => $customOrder,
         ]);
     }
 
@@ -95,7 +145,7 @@ class CheckoutController extends Controller
             'province' => 'required|string|max:120',
             'phone_number' => 'required|string|max:30',
             // Accept common variants for bank transfer method to remain compatible with frontend values
-            'payment_method' => 'required|in:GCash,Bank,Bank Transfer',
+            'payment_method' => 'required|in:GCash,Bank,Bank Transfer,COD',
 			'order_type' => 'nullable|in:standard,backorder',
         ]);
 
@@ -128,7 +178,39 @@ class CheckoutController extends Controller
                 
                 // Check if this is a mixed order
                 $isMixedOrder = $standardItems->isNotEmpty() && $backorderItems->isNotEmpty();
+                
+                // Calculate COD shipping fees if payment method is COD
+                $shippingFee = 0.0;
+                $codFee = 0.0;
+                $isCod = $validated['payment_method'] === 'COD';
+                
+                if ($isCod) {
+                    // Estimate weight from cart items
+                    $estimatedWeight = LbcShippingCalculator::estimateWeight($cartItems);
+                    
+                    // Calculate shipping fee
+                    $shippingFee = LbcShippingCalculator::calculateShippingFee(
+                        $estimatedWeight,
+                        $validated['province'],
+                        $validated['city']
+                    );
+                    
+                    // Calculate COD fee based on order amount (before shipping)
+                    $codFee = LbcShippingCalculator::calculateCodFee($subtotal);
+                    
+                    // Add shipping and COD fees to total
+                    $total += $shippingFee + $codFee;
+                }
 
+                // Determine payment method and status
+                // Normalize payment method to match database enum values
+                $paymentMethod = match($validated['payment_method']) {
+                    'Bank' => 'Bank Transfer',
+                    'COD' => 'COD',
+                    default => $validated['payment_method'], // GCash stays as is
+                };
+                $paymentStatus = $isCod ? 'pending_cod' : 'unpaid';
+                
                 // Create parent order if mixed, or single order if not
                 $parentOrder = null;
                 if ($isMixedOrder) {
@@ -137,26 +219,41 @@ class CheckoutController extends Controller
                         'order_type' => 'mixed',
                         'status' => 'pending',
                         'total_amount' => $total,
-                        'required_payment_amount' => $standardSubtotal + ($backorderSubtotal * 0.5),
-                        'remaining_balance' => $backorderSubtotal * 0.5,
-                        'payment_method' => null,
-                        'payment_status' => 'unpaid',
+                        'required_payment_amount' => $isCod ? $total : ($standardSubtotal + ($backorderSubtotal * 0.5)),
+                        'remaining_balance' => $isCod ? 0 : ($backorderSubtotal * 0.5),
+                        'payment_method' => $paymentMethod,
+                        'payment_status' => $paymentStatus,
+                        'recipient_name' => $isCod ? trim($validated['first_name'] . ' ' . $validated['last_name']) : null,
+                        'recipient_phone' => $isCod ? $validated['phone_number'] : null,
+                        'shipping_fee' => $isCod ? $shippingFee : 0,
+                        'cod_fee' => $isCod ? $codFee : 0,
+                        'carrier' => 'lbc', // Automatically set to LBC
                     ]);
                 }
 
                 // Create standard order
                 $standardOrder = null;
                 if ($standardItems->isNotEmpty()) {
+                    // For COD, calculate fees proportionally for standard items
+                    $standardShippingFee = $isCod ? ($shippingFee * ($standardSubtotal / $subtotal)) : 0;
+                    $standardCodFee = $isCod ? ($codFee * ($standardSubtotal / $subtotal)) : 0;
+                    $standardTotal = $standardSubtotal + $standardShippingFee + $standardCodFee;
+                    
                     $standardOrder = Order::create([
                         'user_id' => $user?->id,
                         'parent_order_id' => $isMixedOrder ? $parentOrder->id : null,
                         'order_type' => 'standard',
                         'status' => 'pending',
-                        'total_amount' => $standardSubtotal,
-                        'required_payment_amount' => $standardSubtotal,
+                        'total_amount' => $standardTotal,
+                        'required_payment_amount' => $isCod ? $standardTotal : $standardSubtotal,
                         'remaining_balance' => 0,
-                        'payment_method' => null,
-                        'payment_status' => 'unpaid',
+                        'payment_method' => $paymentMethod,
+                        'payment_status' => $paymentStatus,
+                        'recipient_name' => $isCod ? trim($validated['first_name'] . ' ' . $validated['last_name']) : null,
+                        'recipient_phone' => $isCod ? $validated['phone_number'] : null,
+                        'shipping_fee' => $standardShippingFee,
+                        'cod_fee' => $standardCodFee,
+                        'carrier' => 'lbc', // Automatically set to LBC
                     ]);
 
                     // Add standard items to standard order
@@ -234,16 +331,26 @@ class CheckoutController extends Controller
                 // Create backorder order
                 $backorderOrder = null;
                 if ($backorderItems->isNotEmpty()) {
+                    // For COD, calculate fees proportionally for backorder items
+                    $backorderShippingFee = $isCod ? ($shippingFee * ($backorderSubtotal / $subtotal)) : 0;
+                    $backorderCodFee = $isCod ? ($codFee * ($backorderSubtotal / $subtotal)) : 0;
+                    $backorderTotal = $backorderSubtotal + $backorderShippingFee + $backorderCodFee;
+                    
                     $backorderOrder = Order::create([
                         'user_id' => $user?->id,
                         'parent_order_id' => $isMixedOrder ? $parentOrder->id : null,
                         'order_type' => 'backorder',
                         'status' => 'pending',
-                        'total_amount' => $backorderSubtotal,
-                        'required_payment_amount' => $backorderSubtotal * 0.5,
-                        'remaining_balance' => $backorderSubtotal * 0.5,
-                        'payment_method' => null,
-                        'payment_status' => 'unpaid',
+                        'total_amount' => $backorderTotal,
+                        'required_payment_amount' => $isCod ? $backorderTotal : ($backorderSubtotal * 0.5),
+                        'remaining_balance' => $isCod ? 0 : ($backorderSubtotal * 0.5),
+                        'payment_method' => $paymentMethod,
+                        'payment_status' => $paymentStatus,
+                        'recipient_name' => $isCod ? trim($validated['first_name'] . ' ' . $validated['last_name']) : null,
+                        'recipient_phone' => $isCod ? $validated['phone_number'] : null,
+                        'shipping_fee' => $backorderShippingFee,
+                        'cod_fee' => $backorderCodFee,
+                        'carrier' => 'lbc', // Automatically set to LBC
                     ]);
 
                     // Add backorder items to backorder order
@@ -272,6 +379,30 @@ class CheckoutController extends Controller
                                 'backorder_status' => \App\Models\OrderItem::BO_PENDING,
                             ]);
                         }
+                    }
+                }
+
+                // Create Payment records for COD orders
+                if ($isCod) {
+                    // For COD, create payment records for each order
+                    if ($standardOrder) {
+                        Payment::create([
+                            'order_id' => $standardOrder->id,
+                            'method' => 'cod',
+                            'amount' => $standardOrder->total_amount,
+                            'status' => 'pending',
+                            'verification_status' => 'pending',
+                        ]);
+                    }
+                    
+                    if ($backorderOrder) {
+                        Payment::create([
+                            'order_id' => $backorderOrder->id,
+                            'method' => 'cod',
+                            'amount' => $backorderOrder->total_amount,
+                            'status' => 'pending',
+                            'verification_status' => 'pending',
+                        ]);
                     }
                 }
 

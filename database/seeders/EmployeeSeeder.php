@@ -26,11 +26,11 @@ class EmployeeSeeder extends Seeder
         Address::create([
             'user_id' => $u1->id,
             'type' => 'shipping',
-            'address_line' => '123 Main St',
-            'city' => 'Anytown',
-            'province' => 'Metro',
-            'postal_code' => '1000',
-            'phone_number' => '1234567890',
+            'address_line' => '456 Ortigas Avenue, Quezon City',
+            'city' => 'Quezon City',
+            'province' => 'Metro Manila',
+            'postal_code' => '1605',
+            'phone_number' => '+639175551234',
         ]);
 
         $u2 = User::create([
@@ -44,27 +44,35 @@ class EmployeeSeeder extends Seeder
         Address::create([
             'user_id' => $u2->id,
             'type' => 'shipping',
-            'address_line' => '456 Second St',
-            'city' => 'Anytown',
-            'province' => 'Metro',
-            'postal_code' => '1001',
-            'phone_number' => '1234567890',
+            'address_line' => '789 EDSA, Mandaluyong City',
+            'city' => 'Mandaluyong',
+            'province' => 'Metro Manila',
+            'postal_code' => '1555',
+            'phone_number' => '+639178765432',
         ]);
 
         // Optionally, create more employees using a factory
+        $cities = ['Pasig', 'Taguig', 'Caloocan'];
+        $provinces = ['Rizal', 'Rizal', 'Metro Manila'];
+        $postalCodes = ['1670', '1634', '1400'];
+        $streets = ['Bonifacio Global City', 'Podium', 'North Avenue'];
+        $index = 0;
+        
         User::factory(3)->create([
             'role' => 'employee',
             'status' => 'active',
-        ])->each(function (User $user) {
+        ])->each(function (User $user) use ($cities, $provinces, $postalCodes, $streets, &$index) {
+            $phone = '+6391' . str_pad($index, 8, '0', STR_PAD_LEFT);
             Address::create([
                 'user_id' => $user->id,
                 'type' => 'shipping',
-                'address_line' => 'Sample Address',
-                'city' => 'City',
-                'province' => 'Province',
-                'postal_code' => '1002',
-                'phone_number' => '1234567890',
+                'address_line' => $streets[$index % count($streets)] . ', ' . $cities[$index % count($cities)],
+                'city' => $cities[$index % count($cities)],
+                'province' => $provinces[$index % count($provinces)],
+                'postal_code' => $postalCodes[$index % count($postalCodes)],
+                'phone_number' => $phone,
             ]);
+            $index++;
         });
     }
 }

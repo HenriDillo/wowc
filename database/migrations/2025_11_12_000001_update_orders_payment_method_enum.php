@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // For MySQL: Alter the enum to include GCash and Bank Transfer
+        // For MySQL: Alter the enum to include GCash, Bank Transfer, and COD
         if (Schema::connection(null)->getConnection()->getDriverName() === 'mysql') {
             Schema::table('orders', function (Blueprint $table) {
                 $table->enum('payment_method', ['COD', 'GCash', 'Card', 'Bank Transfer'])->nullable()->change();

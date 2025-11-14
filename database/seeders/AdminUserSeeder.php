@@ -25,11 +25,11 @@ class AdminUserSeeder extends Seeder
             Address::create([
                 'user_id' => $user->id,
                 'type' => 'shipping',
-                'address_line' => '123 Main St',
-                'city' => 'Anytown',
-                'province' => 'Metro',
-                'postal_code' => '1000',
-                'phone_number' => '1234567890',
+                'address_line' => '123 Ayala Avenue, Makati Business District',
+                'city' => 'Makati',
+                'province' => 'Metro Manila',
+                'postal_code' => '1226',
+                'phone_number' => '+639171234567',
             ]);
         }
     }
