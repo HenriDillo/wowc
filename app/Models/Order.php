@@ -282,7 +282,7 @@ class Order extends Model
 			],
 			'backorder' => [
 				'pending' => ['processing', 'cancelled'],
-				'processing' => ['ready_to_ship', 'cancelled'],
+				'processing' => ['ready_to_ship', 'cancelled'], // "Awaiting Stock" -> "Preparing to Ship"
 				'ready_to_ship' => ['shipped', 'cancelled'],
 				'shipped' => ['delivered', 'cancelled'],
 				'delivered' => ['completed'],

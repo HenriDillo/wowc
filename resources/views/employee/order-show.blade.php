@@ -151,9 +151,29 @@
                             // Disable "completed" for COD orders if payment hasn't been collected
                             $disabled = ($s === 'completed' && $isCod && $order->payment_status === 'pending_cod');
                             $isCurrentStatus = ($s === $order->status);
+                            
+                            // Get friendly status labels for back orders
+                            $statusLabels = [
+                                'backorder' => [
+                                    'pending' => 'Order Placed',
+                                    'processing' => 'Awaiting Stock',
+                                    'ready_to_ship' => 'Preparing to Ship',
+                                    'shipped' => 'Shipped',
+                                    'delivered' => 'Delivered',
+                                    'completed' => 'Completed',
+                                    'cancelled' => 'Cancelled',
+                                ],
+                            ];
+                            
+                            // Use friendly label for back orders, otherwise use default formatting
+                            if ($order->order_type === 'backorder' && isset($statusLabels['backorder'][$s])) {
+                                $statusDisplay = $statusLabels['backorder'][$s];
+                            } else {
+                                $statusDisplay = ucwords(str_replace('_',' ',$s));
+                            }
                         @endphp
                         <option value="{{ $s }}" @selected($isCurrentStatus) @disabled($disabled)>
-                            {{ ucwords(str_replace('_',' ',$s)) }}
+                            {{ $statusDisplay }}
                             @if($isCurrentStatus) (Current) @endif
                             @if($disabled) (Payment Required) @endif
                         </option>
@@ -454,8 +474,8 @@
                     </script>
                 </div>
 
-                <!-- Tracking & Shipping Section (for Standard & Back Orders when ready to ship) -->
-                @if($order->order_type !== 'custom' && in_array($order->status, ['ready_to_ship', 'shipped', 'delivered', 'completed']))
+                <!-- Tracking & Shipping Section (for Standard, Back Orders, and Custom Orders when ready to ship) -->
+                @if(in_array($order->status, ['ready_to_ship', 'shipped', 'delivered', 'completed', 'ready_for_delivery']))
                     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                         <h2 class="font-semibold text-gray-900">Shipping & Tracking</h2>
                         <form method="POST" action="{{ route('employee.orders.update', $order->id) }}" id="shippingForm" class="mt-4 space-y-4">

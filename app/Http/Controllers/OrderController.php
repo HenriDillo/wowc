@@ -88,7 +88,8 @@ class OrderController extends Controller
 
                 if ($orderType === 'backorder') {
                     // Entire order treated as backorder: do not reduce stock for any line
-                    $order->status = 'backorder';
+                    // Automatically set status to "processing" (Awaiting Stock) for back orders
+                    $order->status = 'processing';
                     OrderItem::create([
                         'order_id' => $order->id,
                         'item_id' => $item->id,
@@ -136,14 +137,25 @@ class OrderController extends Controller
                     $item->stock = $available - $quantity;
                     $item->save();
 
-                    // Log stock transaction
-                    ItemStockTransaction::create([
-                        'item_id' => $item->id,
-                        'user_id' => $user->id,
-                        'type' => 'out',
-                        'quantity' => $quantity,
-                        'remarks' => "Order #{$order->id} - Customer order fulfillment",
-                    ]);
+                    // Check for duplicate transaction to prevent duplicates
+                    // Look for existing transaction with same order, item, quantity within last minute
+                    $existingTransaction = ItemStockTransaction::where('item_id', $item->id)
+                        ->where('type', 'out')
+                        ->where('quantity', $quantity)
+                        ->where('remarks', "Order #{$order->id} - Customer order fulfillment")
+                        ->where('created_at', '>=', now()->subMinute())
+                        ->first();
+
+                    if (!$existingTransaction) {
+                        // Log stock transaction
+                        ItemStockTransaction::create([
+                            'item_id' => $item->id,
+                            'user_id' => $user->id,
+                            'type' => 'out',
+                            'quantity' => $quantity,
+                            'remarks' => "Order #{$order->id} - Customer order fulfillment",
+                        ]);
+                    }
 
                     OrderItem::create([
                         'order_id' => $order->id,
@@ -163,14 +175,25 @@ class OrderController extends Controller
                     $item->stock = 0;
                     $item->save();
 
-                    // Log stock transaction
-                    ItemStockTransaction::create([
-                        'item_id' => $item->id,
-                        'user_id' => $user->id,
-                        'type' => 'out',
-                        'quantity' => $fulfilledQty,
-                        'remarks' => "Order #{$order->id} - Partial fulfillment (customer order)",
-                    ]);
+                    // Check for duplicate transaction to prevent duplicates
+                    // Look for existing transaction with same order, item, quantity within last minute
+                    $existingTransaction = ItemStockTransaction::where('item_id', $item->id)
+                        ->where('type', 'out')
+                        ->where('quantity', $fulfilledQty)
+                        ->where('remarks', "Order #{$order->id} - Partial fulfillment (customer order)")
+                        ->where('created_at', '>=', now()->subMinute())
+                        ->first();
+
+                    if (!$existingTransaction) {
+                        // Log stock transaction
+                        ItemStockTransaction::create([
+                            'item_id' => $item->id,
+                            'user_id' => $user->id,
+                            'type' => 'out',
+                            'quantity' => $fulfilledQty,
+                            'remarks' => "Order #{$order->id} - Partial fulfillment (customer order)",
+                        ]);
+                    }
 
                     OrderItem::create([
                         'order_id' => $order->id,
