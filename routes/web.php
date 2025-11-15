@@ -146,6 +146,8 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::post('/orders/{id}/verify-payment', [\App\Http\Controllers\Employee\OrderController::class, 'verifyPayment'])->name('orders.verify-payment');
     // COD collection
     Route::post('/orders/{id}/collect-cod', [\App\Http\Controllers\Employee\OrderController::class, 'collectCod'])->name('orders.collect-cod');
+    // Final payment verification (for remaining balance collected by courier)
+    Route::post('/orders/{id}/verify-final-payment', [\App\Http\Controllers\Employee\OrderController::class, 'verifyFinalPayment'])->name('orders.verify-final-payment');
     // Per-order-item backorder updates
     Route::post('/orders/{order}/items/{item}/backorder', [\App\Http\Controllers\Employee\OrderController::class, 'updateItemBackorder'])->name('orders.items.backorder');
 

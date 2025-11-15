@@ -32,6 +32,10 @@ class Order extends Model
         'recipient_phone',
         'shipping_fee',
         'cod_fee',
+        'final_payment_verified',
+        'final_payment_verified_by',
+        'final_payment_verified_at',
+        'final_payment_verification_notes',
     ];
 
     protected $casts = [
@@ -42,6 +46,8 @@ class Order extends Model
         'cod_fee' => 'decimal:2',
         'expected_restock_date' => 'date',
         'delivered_at' => 'datetime',
+        'final_payment_verified' => 'boolean',
+        'final_payment_verified_at' => 'datetime',
     ];
 
     const STATUS_PENDING = 'pending';
@@ -114,6 +120,27 @@ class Order extends Model
 	{
 		return $this->hasMany(Payment::class);
 	}
+
+    public function finalPaymentVerifier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'final_payment_verified_by');
+    }
+
+    /**
+     * Check if final payment (remaining balance) has been verified
+     */
+    public function hasFinalPaymentVerified(): bool
+    {
+        return $this->final_payment_verified === true;
+    }
+
+    /**
+     * Check if order requires final payment verification
+     */
+    public function requiresFinalPaymentVerification(): bool
+    {
+        return $this->remaining_balance > 0 && !$this->hasFinalPaymentVerified();
+    }
 
 	/**
 	 * Determine the payment percentage required based on order type
@@ -243,6 +270,7 @@ class Order extends Model
 
 	/**
 	 * Calculate required payment amount for mixed orders
+	 * For mixed orders: Only 50% of backorder items (standard items paid separately)
 	 */
 	public function calculateRequiredPaymentForMixedOrder(): float
 	{
@@ -252,11 +280,10 @@ class Order extends Model
 
 		$total = 0.0;
 		foreach ($this->childOrders as $child) {
-			if ($child->order_type === 'standard') {
-				$total += $child->total_amount; // 100% of standard
-			} else {
-				$total += $child->total_amount * 0.5; // 50% of backorder
+			if ($child->order_type === 'backorder') {
+				$total += $child->total_amount * 0.5; // Only 50% of backorder items
 			}
+			// Standard items are not included in upfront payment for mixed orders
 		}
 		return $total;
 	}

@@ -107,8 +107,16 @@ class CheckoutController extends Controller
             // Check if this is a mixed order
             $isMixedOrder = $standardItems->isNotEmpty() && $backorderItems->isNotEmpty();
             
-            // Calculate required payment: 100% of standard + 50% of backorder
-            $requiredPaymentAmount = $standardSubtotal + ($backorderSubtotal * 0.5);
+            // Calculate required payment for mixed orders: Only 50% of backorder items (standard items paid separately)
+            // For pure backorder orders: 50% of total
+            // For mixed orders: Only 50% of backorder portion
+            if ($isMixedOrder) {
+                $requiredPaymentAmount = $backorderSubtotal * 0.5; // Only 50% of backorder items
+            } elseif ($backorderItems->isNotEmpty()) {
+                $requiredPaymentAmount = $backorderSubtotal * 0.5; // Pure backorder: 50% of total
+            } else {
+                $requiredPaymentAmount = $standardSubtotal; // Pure standard: 100% of total
+            }
             
         } elseif ($payOrder) {
             // For existing orders (custom order payment)
@@ -149,6 +157,7 @@ class CheckoutController extends Controller
 			'order_type' => 'nullable|in:standard,backorder',
         ]);
 
+        // Validate payment method restrictions for 50% upfront orders
         $cart = Cart::where('status', 'active')
             ->where(function ($q) use ($user) {
                 if ($user) {
@@ -158,7 +167,22 @@ class CheckoutController extends Controller
                 }
             })->firstOrFail();
 
-		$cartItems = CartItem::with('item')->where('cart_id', $cart->id)->get();
+        $cartItems = CartItem::with('item')->where('cart_id', $cart->id)->get();
+        
+        // Separate standard and backorder items
+        $standardItems = $cartItems->filter(fn($ci) => !($ci->is_backorder ?? false) && !($ci->item->isBackorder() ?? false));
+        $backorderItems = $cartItems->filter(fn($ci) => ($ci->is_backorder ?? false) || ($ci->item->isBackorder() ?? false));
+        
+        // Check if this is a mixed order (Standard + Backorder only)
+        $isMixedOrder = $standardItems->isNotEmpty() && $backorderItems->isNotEmpty();
+        
+        // Determine if this order requires 50% upfront (Backorder, Custom Order, or Mixed Order with backorder)
+        $requires50PercentUpfront = $backorderItems->isNotEmpty() || $isMixedOrder;
+        
+        // If order requires 50% upfront, COD is not allowed
+        if ($requires50PercentUpfront && $validated['payment_method'] === 'COD') {
+            return back()->withErrors(['payment_method' => 'COD is not available for back order, custom order, or mixed orders with back order items. Please use Bank Transfer or GCash.'])->withInput();
+        }
 		if ($cartItems->isEmpty()) {
             return back()->withErrors(['cart' => 'Your cart is empty.']);
         }
@@ -219,8 +243,8 @@ class CheckoutController extends Controller
                         'order_type' => 'mixed',
                         'status' => 'pending',
                         'total_amount' => $total,
-                        'required_payment_amount' => $isCod ? $total : ($standardSubtotal + ($backorderSubtotal * 0.5)),
-                        'remaining_balance' => $isCod ? 0 : ($backorderSubtotal * 0.5),
+                        'required_payment_amount' => $isCod ? $total : ($backorderSubtotal * 0.5), // Only 50% of backorder items for mixed orders
+                        'remaining_balance' => $isCod ? 0 : ($backorderSubtotal * 0.5), // Remaining 50% of backorder items
                         'payment_method' => $paymentMethod,
                         'payment_status' => $paymentStatus,
                         'recipient_name' => $isCod ? trim($validated['first_name'] . ' ' . $validated['last_name']) : null,
@@ -234,10 +258,36 @@ class CheckoutController extends Controller
                 // Create standard order
                 $standardOrder = null;
                 if ($standardItems->isNotEmpty()) {
-                    // For COD, calculate fees proportionally for standard items
-                    $standardShippingFee = $isCod ? ($shippingFee * ($standardSubtotal / $subtotal)) : 0;
-                    $standardCodFee = $isCod ? ($codFee * ($standardSubtotal / $subtotal)) : 0;
+                    // For mixed orders, standard order is automatically set to COD
+                    $standardIsCod = $isMixedOrder ? true : $isCod;
+                    
+                    // Calculate COD fees for standard items if it's COD or mixed order
+                    $standardShippingFee = 0.0;
+                    $standardCodFee = 0.0;
+                    if ($standardIsCod) {
+                        // Estimate weight from standard items
+                        $estimatedWeight = LbcShippingCalculator::estimateWeight($standardItems);
+                        
+                        // Calculate shipping fee for standard items
+                        $standardShippingFee = LbcShippingCalculator::calculateShippingFee(
+                            $estimatedWeight,
+                            $validated['province'],
+                            $validated['city']
+                        );
+                        
+                        // Calculate COD fee based on standard items amount
+                        $standardCodFee = LbcShippingCalculator::calculateCodFee($standardSubtotal);
+                    } elseif ($isCod) {
+                        // If parent order is COD, calculate fees proportionally
+                        $standardShippingFee = $shippingFee * ($standardSubtotal / $subtotal);
+                        $standardCodFee = $codFee * ($standardSubtotal / $subtotal);
+                    }
+                    
                     $standardTotal = $standardSubtotal + $standardShippingFee + $standardCodFee;
+                    
+                    // Set payment method and status for standard order
+                    $standardPaymentMethod = $standardIsCod ? 'COD' : $paymentMethod;
+                    $standardPaymentStatus = $standardIsCod ? 'pending_cod' : $paymentStatus;
                     
                     $standardOrder = Order::create([
                         'user_id' => $user?->id,
@@ -245,16 +295,27 @@ class CheckoutController extends Controller
                         'order_type' => 'standard',
                         'status' => 'pending',
                         'total_amount' => $standardTotal,
-                        'required_payment_amount' => $isCod ? $standardTotal : $standardSubtotal,
+                        'required_payment_amount' => $standardIsCod ? $standardTotal : $standardSubtotal,
                         'remaining_balance' => 0,
-                        'payment_method' => $paymentMethod,
-                        'payment_status' => $paymentStatus,
-                        'recipient_name' => $isCod ? trim($validated['first_name'] . ' ' . $validated['last_name']) : null,
-                        'recipient_phone' => $isCod ? $validated['phone_number'] : null,
+                        'payment_method' => $standardPaymentMethod,
+                        'payment_status' => $standardPaymentStatus,
+                        'recipient_name' => $standardIsCod ? trim($validated['first_name'] . ' ' . $validated['last_name']) : null,
+                        'recipient_phone' => $standardIsCod ? $validated['phone_number'] : null,
                         'shipping_fee' => $standardShippingFee,
                         'cod_fee' => $standardCodFee,
                         'carrier' => 'lbc', // Automatically set to LBC
                     ]);
+                    
+                    // Create Payment record for COD standard orders in mixed orders
+                    if ($standardIsCod) {
+                        Payment::create([
+                            'order_id' => $standardOrder->id,
+                            'method' => 'cod',
+                            'amount' => $standardOrder->total_amount,
+                            'status' => 'pending',
+                            'verification_status' => 'pending',
+                        ]);
+                    }
 
                     // Add standard items to standard order
                     foreach ($standardItems as $ci) {

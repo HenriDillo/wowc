@@ -636,10 +636,26 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 								</div>
 							<?php endif; ?>
 							
+							<?php if($order->payment_status === 'partially_paid' && $order->remaining_balance > 0): ?>
+								<div class="pt-2 border-t mt-2 space-y-2">
+									<div class="flex justify-between">
+										<span class="text-gray-600">Amount Paid (50%):</span>
+										<span class="font-medium text-green-700">₱<?php echo e(number_format($order->required_payment_amount ?? ($order->total_amount * 0.5), 2)); ?></span>
+									</div>
+									<div class="flex justify-between font-semibold bg-blue-50 p-2 rounded border border-blue-200">
+										<span class="text-blue-900">Remaining Balance (50%):</span>
+										<span class="text-blue-900">₱<?php echo e(number_format($order->remaining_balance, 2)); ?></span>
+									</div>
+									<div class="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+										<p class="text-xs text-blue-800 font-medium">📦 Remaining balance will be collected by the LBC courier upon delivery.</p>
+									</div>
+								</div>
+							<?php else: ?>
 							<div class="pt-2 border-t mt-2 font-medium flex justify-between">
 								<span>Total:</span>
 								<span>₱<?php echo e(number_format($order->total_amount, 2)); ?></span>
 							</div>
+							<?php endif; ?>
 						</div>
                     </div>
 

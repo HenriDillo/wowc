@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Employee;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\ItemStockTransaction;
+use App\Models\Item;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
@@ -86,6 +89,7 @@ class OrderController extends Controller
             'childOrders',
             'parentOrder',
             'payments.verifier',
+            'finalPaymentVerifier',
         ])->findOrFail($id);
         // If the request expects JSON (modal usage), return JSON; otherwise render a full details page
         if (request()->expectsJson()) {
@@ -149,8 +153,10 @@ class OrderController extends Controller
             return back()->withErrors(['status' => "Invalid status transition. Current status: " . ucwords(str_replace('_', ' ', $order->status)) . ". Valid next statuses: {$nextStatusesList}."]);
         }
         
-        // For back orders: Validate stock availability when transitioning to "ready_to_ship" (Preparing to Ship)
-        if ($order->order_type === 'backorder' && $validated['status'] === 'ready_to_ship' && $order->status === 'processing') {
+        // For back orders: Validate stock availability and create stock transactions when transitioning to "ready_to_ship" (Preparing to Ship)
+        // This also applies to backorder child orders in mixed orders
+        $isBackorderOrder = $order->order_type === 'backorder';
+        if ($isBackorderOrder && $validated['status'] === 'ready_to_ship' && $order->status === 'processing') {
             // Check if all back order items have sufficient stock
             $insufficientStock = [];
             foreach ($order->items as $orderItem) {
@@ -176,11 +182,69 @@ class OrderController extends Controller
                 }
                 return back()->withErrors(['status' => trim($errorMessage)]);
             }
+
+            // Stock is sufficient - create stock transactions and reduce stock
+            DB::transaction(function () use ($order) {
+                $user = Auth::user();
+                foreach ($order->items as $orderItem) {
+                    if ($orderItem->is_backorder) {
+                        $item = $orderItem->item;
+                        $requiredQty = (int) $orderItem->quantity;
+                        
+                        // Lock the item for update to prevent race conditions
+                        $item = Item::lockForUpdate()->find($item->id);
+                        if (!$item) {
+                            continue;
+                        }
+                        
+                        $availableStock = (int) max(0, $item->stock ?? 0);
+                        
+                        // Double-check stock is still available (in case it changed)
+                        if ($availableStock < $requiredQty) {
+                            continue;
+                        }
+                        
+                        // Reduce stock
+                        $item->stock = $availableStock - $requiredQty;
+                        $item->save();
+                        
+                        // Check for duplicate transaction to prevent duplicates
+                        $existingTransaction = ItemStockTransaction::where('item_id', $item->id)
+                            ->where('type', 'out')
+                            ->where('quantity', $requiredQty)
+                            ->where('remarks', "Backorder fulfillment - Order #{$order->id}, OrderItem #{$orderItem->id}")
+                            ->where('created_at', '>=', now()->subMinute())
+                            ->first();
+                        
+                        if (!$existingTransaction) {
+                            // Create stock transaction for backorder fulfillment
+                            ItemStockTransaction::create([
+                                'item_id' => $item->id,
+                                'user_id' => $user->id,
+                                'type' => 'out',
+                                'quantity' => $requiredQty,
+                                'remarks' => "Backorder fulfillment - Order #{$order->id}, OrderItem #{$orderItem->id}",
+                            ]);
+                        }
+                        
+                        // Update backorder status to fulfilled
+                        $orderItem->backorder_status = \App\Models\OrderItem::BO_FULFILLED;
+                        $orderItem->save();
+                    }
+                }
+            });
         }
         
         // Check if this is a COD order
         $isCod = $order->payment_method === 'COD';
         
+        // For orders with remaining balance: Block completion until final payment is verified
+        if ($order->remaining_balance > 0 && $validated['status'] === 'completed') {
+            if (!$order->hasFinalPaymentVerified()) {
+                return back()->withErrors(['payment' => 'Final payment verification is required before the order can be marked as completed. Please verify that the remaining balance was collected by the LBC courier.']);
+            }
+        }
+
         // For COD orders: Allow processing without payment, but block completion until payment is collected
         if ($isCod) {
             // Block completion if COD payment hasn't been collected
@@ -475,6 +539,99 @@ class OrderController extends Controller
             }
 
             return back()->withErrors(['payment' => 'COD collection failed. Please try again.']);
+        }
+    }
+
+    /**
+     * Verify final payment (remaining balance collected by courier)
+     */
+    public function verifyFinalPayment($id, Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->isEmployee()) {
+            abort(403, 'Only employees can verify final payment');
+        }
+
+        $validated = $request->validate([
+            'action' => 'required|in:approve,reject',
+            'verification_notes' => 'required_if:action,reject|nullable|string|max:500',
+        ], [
+            'action.required' => 'Please select an action (approve or reject)',
+            'action.in' => 'Invalid action. Must be approve or reject',
+            'verification_notes.required_if' => 'Rejection reason is required when rejecting payment',
+            'verification_notes.max' => 'Rejection reason must not exceed 500 characters',
+        ]);
+
+        $order = Order::with(['childOrders'])->findOrFail($id);
+
+        // Validate that this order has a remaining balance
+        if ($order->remaining_balance <= 0) {
+            return back()->withErrors(['payment' => 'This order does not have a remaining balance to verify.']);
+        }
+
+        // Check if already verified
+        if ($order->hasFinalPaymentVerified()) {
+            return back()->withErrors(['payment' => 'Final payment has already been verified for this order.']);
+        }
+
+        try {
+            \DB::transaction(function () use ($validated, $order, $user) {
+                $action = $validated['action'];
+                $notes = $validated['verification_notes'] ?? null;
+
+                if ($action === 'approve') {
+                    $order->final_payment_verified = true;
+                    $order->final_payment_verified_by = $user->id;
+                    $order->final_payment_verified_at = now();
+                    $order->final_payment_verification_notes = $notes;
+                    
+                    // Update payment status to fully paid
+                    $order->payment_status = 'paid';
+                    $order->remaining_balance = 0;
+                } else {
+                    // Reject - keep remaining balance and add notes
+                    $order->final_payment_verification_notes = $notes;
+                    // Don't mark as verified, but store the rejection notes
+                }
+                
+                $order->save();
+
+                // For mixed orders, update child orders if they have remaining balance
+                if ($order->order_type === 'mixed' && $order->childOrders()->exists()) {
+                    foreach ($order->childOrders as $child) {
+                        if ($child->remaining_balance > 0 && $action === 'approve') {
+                            $child->final_payment_verified = true;
+                            $child->final_payment_verified_by = $user->id;
+                            $child->final_payment_verified_at = now();
+                            $child->payment_status = 'paid';
+                            $child->remaining_balance = 0;
+                            $child->save();
+                        }
+                    }
+                }
+            });
+
+            $message = $validated['action'] === 'approve' 
+                ? 'Final payment verified successfully. Order can now be marked as completed.' 
+                : 'Final payment verification rejected. Notes have been saved.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => true, 'message' => $message]);
+            }
+
+            return back()->with('success', $message);
+        } catch (\Exception $e) {
+            \Log::error('Final payment verification failed', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Final payment verification failed: ' . $e->getMessage()], 500);
+            }
+
+            return back()->withErrors(['payment' => 'Final payment verification failed. Please try again.']);
         }
     }
 }

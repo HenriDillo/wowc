@@ -47,24 +47,57 @@
             <!-- This is a parent (mixed) order -->
             <div class="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
                 <h3 class="font-semibold text-purple-900">Mixed Order Structure</h3>
-                <p class="text-sm text-purple-700 mt-1">This order contains both standard and back order items split into sub-orders below.</p>
+                <p class="text-sm text-purple-700 mt-1">This order contains both standard and back order items split into sub-orders below. Each sub-order is managed independently with its own status flow and payment processing.</p>
                 <div class="mt-3 space-y-2">
                     @php $totalAmount = $order->total_amount; @endphp
                     @foreach($order->childOrders as $child)
-                        <div class="flex items-center justify-between bg-white px-3 py-2 rounded border border-purple-100">
-                            <div class="text-sm">
-                                <span class="font-medium text-gray-900">Sub-Order #{{ $child->id }}</span>
-                                <span class="text-gray-600 ml-2">• {{ ucfirst($child->order_type) }} Items</span>
+                        @php
+                            $childStatusColor = match($child->status) {
+                                'pending' => 'bg-yellow-100 text-yellow-800',
+                                'processing' => 'bg-blue-100 text-blue-800',
+                                'ready_to_ship' => 'bg-indigo-100 text-indigo-800',
+                                'shipped' => 'bg-purple-100 text-purple-800',
+                                'delivered' => 'bg-green-100 text-green-800',
+                                'completed' => 'bg-green-100 text-green-800',
+                                'cancelled' => 'bg-red-100 text-red-800',
+                                default => 'bg-gray-100 text-gray-800',
+                            };
+                            $childPaymentStatus = $child->payment_status ?? 'unpaid';
+                            $childPaymentColor = match($childPaymentStatus) {
+                                'paid' => 'bg-green-100 text-green-800',
+                                'partially_paid' => 'bg-blue-100 text-blue-800',
+                                'pending_verification' => 'bg-yellow-100 text-yellow-800',
+                                'pending_cod' => 'bg-blue-100 text-blue-800',
+                                default => 'bg-red-100 text-red-800',
+                            };
+                        @endphp
+                        <div class="flex items-center justify-between bg-white px-3 py-3 rounded border border-purple-100">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <span class="font-medium text-gray-900">Sub-Order #{{ $child->id }}</span>
+                                    <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium 
+                                        @if($child->order_type === 'standard') bg-green-100 text-green-800
+                                        @else bg-blue-100 text-blue-800
+                                        @endif">
+                                        {{ ucfirst($child->order_type) }} Items
+                                    </span>
+                                    <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium {{ $childStatusColor }}">
+                                        {{ ucwords(str_replace('_', ' ', $child->status)) }}
+                                    </span>
+                                    <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium {{ $childPaymentColor }}">
+                                        {{ ucwords(str_replace('_', ' ', $childPaymentStatus)) }}
+                                    </span>
+                                </div>
+                                <div class="text-xs text-gray-600">
+                                    Payment Method: <span class="font-medium">{{ $child->payment_method ?? 'N/A' }}</span>
+                                    @if($child->remaining_balance > 0)
+                                        | Remaining: <span class="font-medium text-blue-700">₱{{ number_format($child->remaining_balance, 2) }}</span>
+                                    @endif
+                                </div>
                             </div>
-                            <div class="flex items-center gap-3">
-                                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium 
-                                    @if($child->order_type === 'standard') bg-green-100 text-green-800
-                                    @else bg-blue-100 text-blue-800
-                                    @endif">
-                                    {{ ucfirst($child->status) }}
-                                </span>
+                            <div class="flex items-center gap-3 ml-4">
                                 <span class="text-sm font-medium text-gray-700">₱{{ number_format($child->total_amount, 2) }}</span>
-                                <a href="{{ route('employee.orders.show', $child->id) }}" class="text-xs text-purple-700 hover:underline">View</a>
+                                <a href="{{ route('employee.orders.show', $child->id) }}" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-purple-300 text-purple-700 hover:bg-purple-100 text-xs font-medium">Manage Sub-Order</a>
                             </div>
                         </div>
                     @endforeach
@@ -72,6 +105,9 @@
                 <div class="mt-3 pt-3 border-t border-purple-200 flex items-center justify-between">
                     <span class="font-medium text-purple-900">Total Parent Order Amount</span>
                     <span class="text-lg font-semibold text-purple-900">₱{{ number_format($totalAmount, 2) }}</span>
+                </div>
+                <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p class="text-xs text-blue-800 font-medium">ℹ️ Each sub-order is managed independently. Click "Manage Sub-Order" to update status, verify payments, and process each order separately.</p>
                 </div>
             </div>
         @elseif($order->parent_order_id)
@@ -93,8 +129,20 @@
             $isCod = $order->payment_method === 'COD';
             // COD orders can be updated (except completed status if not paid), non-COD orders need verified payment
             $canUpdateStatus = $isCod || $hasVerifiedPayment || $order->payment_status === 'paid';
+            // For mixed orders, disable status updates on parent - manage via sub-orders
+            $isMixedOrderParent = $order->order_type === 'mixed' && $order->childOrders->isNotEmpty();
         @endphp
-        @if(!$canUpdateStatus)
+        
+        @if($isMixedOrderParent)
+            <div class="mb-6 rounded-lg border-l-4 border-blue-500 bg-blue-50 p-4">
+                <div class="flex items-start gap-3">
+                    <div class="text-blue-700 font-semibold">ℹ️ Mixed Order Management</div>
+                    <div class="text-sm text-blue-700 flex-1">
+                        This is a parent mixed order. Status updates and payment verification should be done on each sub-order individually. Use the "Manage Sub-Order" links above to process each order separately.
+                    </div>
+                </div>
+            </div>
+        @elseif(!$canUpdateStatus)
             <div class="mb-6 rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
                 <div class="flex items-start gap-3">
                     <div class="text-red-700 font-semibold">⚠ Payment Required</div>
@@ -134,7 +182,14 @@
             // COD orders can be updated (except completed if not paid), non-COD orders need verified payment
             $canUpdateStatus = $isCod || $hasVerifiedPayment || $order->payment_status === 'paid';
         @endphp
-        @if($canUpdateStatus)
+        @if($isMixedOrderParent)
+            <!-- Mixed order parent - show info that sub-orders are managed separately -->
+            <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <p class="text-sm text-gray-600">
+                    Status updates are managed at the sub-order level. Please use the "Manage Sub-Order" links above to update individual sub-order statuses.
+                </p>
+            </div>
+        @elseif($canUpdateStatus)
             <form method="POST" action="{{ route('employee.orders.update', $order->id) }}" class="mb-6 flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-100">
                 @csrf
                 @method('PUT')
@@ -149,7 +204,11 @@
                     @foreach($availableStatuses as $s)
                         @php
                             // Disable "completed" for COD orders if payment hasn't been collected
-                            $disabled = ($s === 'completed' && $isCod && $order->payment_status === 'pending_cod');
+                            // Also disable "completed" if final payment verification is required
+                            $disabled = ($s === 'completed' && (
+                                ($isCod && $order->payment_status === 'pending_cod') ||
+                                ($order->requiresFinalPaymentVerification())
+                            ));
                             $isCurrentStatus = ($s === $order->status);
                             
                             // Get friendly status labels for back orders
@@ -175,7 +234,13 @@
                         <option value="{{ $s }}" @selected($isCurrentStatus) @disabled($disabled)>
                             {{ $statusDisplay }}
                             @if($isCurrentStatus) (Current) @endif
-                            @if($disabled) (Payment Required) @endif
+                            @if($disabled)
+                                @if($order->requiresFinalPaymentVerification())
+                                    (Final Payment Verification Required)
+                                @else
+                                    (Payment Required)
+                                @endif
+                            @endif
                         </option>
                     @endforeach
                 </select>
@@ -528,17 +593,56 @@
                 <!-- Payment Verification Card -->
                 <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                     <h2 class="font-semibold text-gray-900 mb-3">Payment Verification</h2>
+                    @if($isMixedOrderParent)
+                        <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p class="text-sm text-blue-800 font-medium mb-2">ℹ️ Mixed Order Payment Management</p>
+                            <p class="text-xs text-blue-700 mb-3">Payment verification is handled separately for each sub-order. Please manage payments for each sub-order individually.</p>
+                            <div class="space-y-2">
+                                @foreach($order->childOrders as $child)
+                                    @php
+                                        $childLatestPayment = $child->getLatestPayment();
+                                        $childPaymentStatus = $child->payment_status ?? 'unpaid';
+                                        $childHasPendingVerification = $child->hasPendingPaymentVerification();
+                                    @endphp
+                                    <div class="flex items-center justify-between bg-white px-3 py-2 rounded border border-blue-100">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2 mb-1">
+                                                <span class="text-sm font-medium text-gray-900">Sub-Order #{{ $child->id }}</span>
+                                                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium 
+                                                    @if($child->order_type === 'standard') bg-green-100 text-green-800
+                                                    @else bg-blue-100 text-blue-800
+                                                    @endif">
+                                                    {{ ucfirst($child->order_type) }}
+                                                </span>
+                                                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium 
+                                                    @if($childPaymentStatus === 'paid') bg-green-100 text-green-800
+                                                    @elseif($childPaymentStatus === 'partially_paid') bg-blue-100 text-blue-800
+                                                    @elseif($childPaymentStatus === 'pending_verification' || $childHasPendingVerification) bg-yellow-100 text-yellow-800
+                                                    @elseif($childPaymentStatus === 'pending_cod') bg-blue-100 text-blue-800
+                                                    @else bg-red-100 text-red-800
+                                                    @endif">
+                                                    {{ ucwords(str_replace('_', ' ', $childPaymentStatus)) }}
+                                                </span>
+                                            </div>
+                                            <div class="text-xs text-gray-600">
+                                                Payment Method: <span class="font-medium">{{ $child->payment_method ?? 'N/A' }}</span>
+                                                @if($child->remaining_balance > 0)
+                                                    | Remaining: <span class="font-medium text-blue-700">₱{{ number_format($child->remaining_balance, 2) }}</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <a href="{{ route('employee.orders.show', $child->id) }}" class="ml-4 inline-flex items-center px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-100 text-xs font-medium">Verify Payment →</a>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @else
                     @php
                         $latestPayment = $order->getLatestPayment();
                         $isRejected = $latestPayment && $latestPayment->isRejected();
                         
                         // Calculate required amount
-                        $requiredAmount = 0;
-                        if ($order->order_type === 'mixed' && $order->childOrders()->exists()) {
-                            $requiredAmount = $order->calculateRequiredPaymentForMixedOrder();
-                        } else {
-                            $requiredAmount = $order->required_payment_amount ?? $order->calculateRequiredPaymentAmount();
-                        }
+                        $requiredAmount = $order->required_payment_amount ?? $order->calculateRequiredPaymentAmount();
                     @endphp
                     
                     <div class="space-y-4">
@@ -750,6 +854,79 @@
                             </div>
                         @endif
 
+                        <!-- Final Payment Verification (for remaining balance) -->
+                        @php
+                            $hasRemainingBalance = $order->remaining_balance > 0;
+                            $finalPaymentVerified = $order->hasFinalPaymentVerified();
+                            $requiresFinalVerification = $order->requiresFinalPaymentVerification();
+                        @endphp
+                        @if($hasRemainingBalance)
+                            <div class="border-t border-gray-200 pt-4 mt-4">
+                                <h3 class="font-semibold text-gray-900 mb-3">Final Payment Verification</h3>
+                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                                    <p class="text-sm text-blue-800 font-medium mb-1">💰 Remaining Balance to Collect</p>
+                                    <p class="text-lg font-bold text-blue-900">₱{{ number_format($order->remaining_balance, 2) }}</p>
+                                    <p class="text-xs text-blue-700 mt-2">This amount will be collected by the LBC courier upon delivery.</p>
+                                </div>
+                                
+                                @if($finalPaymentVerified)
+                                    <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                                        <p class="text-sm text-green-800 font-medium">✓ Final Payment Verified</p>
+                                        @if($order->finalPaymentVerifier)
+                                            <p class="text-xs text-green-700 mt-1">
+                                                Verified by: <span class="font-medium">{{ $order->finalPaymentVerifier->name ?? 'N/A' }}</span>
+                                                @if($order->final_payment_verified_at)
+                                                    on {{ $order->final_payment_verified_at->format('M d, Y g:i A') }}
+                                                @endif
+                                            </p>
+                                        @endif
+                                        @if($order->final_payment_verification_notes)
+                                            <p class="text-xs text-green-700 mt-2">
+                                                <strong>Notes:</strong> {{ $order->final_payment_verification_notes }}
+                                            </p>
+                                        @endif
+                                    </div>
+                                @elseif($requiresFinalVerification)
+                                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
+                                        <p class="text-sm text-yellow-800 font-medium">⏳ Pending Final Payment Verification</p>
+                                        <p class="text-xs text-yellow-700 mt-1">Please verify that the remaining balance has been collected by the LBC courier before marking the order as completed.</p>
+                                    </div>
+                                    <form method="POST" action="{{ route('employee.orders.verify-final-payment', $order->id) }}" id="verifyFinalPaymentForm" class="space-y-4">
+                                        @csrf
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Verification Action:</label>
+                                            <div class="space-y-2">
+                                                <label class="flex items-center">
+                                                    <input type="radio" name="action" value="approve" class="mr-2" required>
+                                                    <span class="text-sm text-green-700 font-medium">✓ Approve Final Payment</span>
+                                                </label>
+                                                <label class="flex items-center">
+                                                    <input type="radio" name="action" value="reject" class="mr-2" required>
+                                                    <span class="text-sm text-red-700 font-medium">✗ Reject Final Payment</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div id="finalRejectionNotes" class="hidden">
+                                            <label for="verification_notes" class="block text-sm font-medium text-gray-700 mb-1">
+                                                Rejection Reason <span class="text-red-500">*</span>
+                                            </label>
+                                            <textarea 
+                                                id="verification_notes" 
+                                                name="verification_notes" 
+                                                rows="3" 
+                                                class="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-red-500 focus:ring-red-500"
+                                                placeholder="Please explain why the final payment verification is being rejected..."
+                                            ></textarea>
+                                            <p class="mt-1 text-xs text-gray-500">This note will be saved for reference.</p>
+                                        </div>
+                                        <button type="submit" class="w-full px-4 py-2 rounded-md text-white font-medium hover:opacity-95 transition-opacity" style="background:#c59d5f;">
+                                            Verify Final Payment
+                                        </button>
+                                    </form>
+                                @endif
+                            </div>
+                        @endif
+
                         <!-- Payment Summary -->
                         @if($paymentStatus === 'partially_paid')
                             <div class="border-t border-gray-200 pt-3 space-y-2">
@@ -773,6 +950,7 @@
                             </div>
                         @endif
                     </div>
+                    @endif
                 </div>
 
                 <!-- Delivery & Shipping Card -->
@@ -874,6 +1052,31 @@
                             rejectionNotes.classList.add('hidden');
                             notesTextarea.removeAttribute('required');
                             notesTextarea.value = '';
+                        }
+                    });
+                });
+            }
+
+            // Toggle final payment rejection notes field based on action selection
+            const finalPaymentForm = document.getElementById('verifyFinalPaymentForm');
+            if (finalPaymentForm) {
+                const actionRadios = finalPaymentForm.querySelectorAll('input[name="action"]');
+                const finalRejectionNotes = document.getElementById('finalRejectionNotes');
+                const finalNotesTextarea = finalPaymentForm.querySelector('#verification_notes');
+                
+                actionRadios.forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        if (this.value === 'reject') {
+                            finalRejectionNotes.classList.remove('hidden');
+                            if (finalNotesTextarea) {
+                                finalNotesTextarea.setAttribute('required', 'required');
+                            }
+                        } else {
+                            finalRejectionNotes.classList.add('hidden');
+                            if (finalNotesTextarea) {
+                                finalNotesTextarea.removeAttribute('required');
+                                finalNotesTextarea.value = '';
+                            }
                         }
                     });
                 });
