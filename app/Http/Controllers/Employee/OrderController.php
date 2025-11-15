@@ -140,13 +140,42 @@ class OrderController extends Controller
             'delivered_at' => 'nullable|date',
         ]);
         
-        $order = Order::with(['payments', 'childOrders.payments'])->findOrFail($id);
+        $order = Order::with(['payments', 'childOrders.payments', 'items.item'])->findOrFail($id);
         
         // Validate forward-only status transition
         if (!$order->canTransitionTo($validated['status'])) {
             $validNextStatuses = $order->getValidNextStatuses();
             $nextStatusesList = !empty($validNextStatuses) ? implode(', ', array_map('ucwords', array_map(fn($s) => str_replace('_', ' ', $s), $validNextStatuses))) : 'None (order is completed or cancelled)';
             return back()->withErrors(['status' => "Invalid status transition. Current status: " . ucwords(str_replace('_', ' ', $order->status)) . ". Valid next statuses: {$nextStatusesList}."]);
+        }
+        
+        // For back orders: Validate stock availability when transitioning to "ready_to_ship" (Preparing to Ship)
+        if ($order->order_type === 'backorder' && $validated['status'] === 'ready_to_ship' && $order->status === 'processing') {
+            // Check if all back order items have sufficient stock
+            $insufficientStock = [];
+            foreach ($order->items as $orderItem) {
+                if ($orderItem->is_backorder) {
+                    $item = $orderItem->item;
+                    $requiredQty = (int) $orderItem->quantity;
+                    $availableStock = (int) max(0, $item->stock ?? 0);
+                    
+                    if ($availableStock < $requiredQty) {
+                        $insufficientStock[] = [
+                            'item' => $item->name,
+                            'required' => $requiredQty,
+                            'available' => $availableStock,
+                        ];
+                    }
+                }
+            }
+            
+            if (!empty($insufficientStock)) {
+                $errorMessage = "Cannot transition to 'Preparing to Ship'. Insufficient stock for the following items:\n";
+                foreach ($insufficientStock as $item) {
+                    $errorMessage .= "- {$item['item']}: Required {$item['required']}, Available {$item['available']}\n";
+                }
+                return back()->withErrors(['status' => trim($errorMessage)]);
+            }
         }
         
         // Check if this is a COD order
@@ -182,8 +211,14 @@ class OrderController extends Controller
         $order->status = $validated['status'];
         
         // Save shipping fields if provided
+        // Only save tracking number if it's not empty (trim whitespace)
         if (isset($validated['tracking_number'])) {
-            $order->tracking_number = $validated['tracking_number'];
+            $trackingNumber = trim($validated['tracking_number']);
+            // Validate that tracking number is not empty if provided
+            if ($trackingNumber === '') {
+                return back()->withErrors(['tracking_number' => 'Tracking number cannot be empty. Please enter a valid tracking number or leave it blank.']);
+            }
+            $order->tracking_number = $trackingNumber;
         }
         
         // Automatically set carrier to LBC for all orders
@@ -288,15 +323,23 @@ class OrderController extends Controller
                         if ($paidAmount >= $paymentOrder->total_amount) {
                             $paymentOrder->payment_status = 'paid';
                             $paymentOrder->remaining_balance = 0;
-                            // Set order status to processing if it's still pending
-                            if ($paymentOrder->status === Order::STATUS_PENDING) {
+                            
+                            // For custom orders: automatically set status to "in_design" when payment is verified
+                            // Only update if order is still pending (prevents status regression)
+                            if ($paymentOrder->order_type === Order::TYPE_CUSTOM) {
+                                // Only set to in_design if status is pending (not already in a later stage)
+                                if ($paymentOrder->status === Order::STATUS_PENDING) {
+                                    $paymentOrder->status = 'in_design';
+                                }
+                            } elseif ($paymentOrder->order_type !== Order::TYPE_CUSTOM && $paymentOrder->status === Order::STATUS_PENDING) {
+                                // For non-custom orders, set to processing if still pending
                                 $paymentOrder->status = Order::STATUS_PROCESSING;
                             }
                         } else {
                             $paymentOrder->payment_status = 'partially_paid';
                             $paymentOrder->remaining_balance = max(0, $paymentOrder->total_amount - $paidAmount);
-                            // For partial payments, set to backorder status
-                            if ($paymentOrder->status === Order::STATUS_PENDING) {
+                            // For partial payments, set to backorder status (only for non-custom orders)
+                            if ($paymentOrder->order_type !== Order::TYPE_CUSTOM && $paymentOrder->status === Order::STATUS_PENDING) {
                                 $paymentOrder->status = Order::STATUS_BACKORDER;
                             }
                         }

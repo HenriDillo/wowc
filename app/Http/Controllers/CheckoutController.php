@@ -270,13 +270,24 @@ class CheckoutController extends Controller
                             $item->stock = $available - $requestedQty;
                             $item->save();
 
-                            ItemStockTransaction::create([
-                                'item_id' => $item->id,
-                                'user_id' => $user?->id,
-                                'type' => 'out',
-                                'quantity' => $requestedQty,
-                                'remarks' => "Order #{$standardOrder->id} - Customer order fulfillment",
-                            ]);
+                            // Check for duplicate transaction to prevent duplicates
+                            // Look for existing transaction with same order, item, quantity within last minute
+                            $existingTransaction = ItemStockTransaction::where('item_id', $item->id)
+                                ->where('type', 'out')
+                                ->where('quantity', $requestedQty)
+                                ->where('remarks', "Order #{$standardOrder->id} - Customer order fulfillment")
+                                ->where('created_at', '>=', now()->subMinute())
+                                ->first();
+
+                            if (!$existingTransaction) {
+                                ItemStockTransaction::create([
+                                    'item_id' => $item->id,
+                                    'user_id' => $user?->id,
+                                    'type' => 'out',
+                                    'quantity' => $requestedQty,
+                                    'remarks' => "Order #{$standardOrder->id} - Customer order fulfillment",
+                                ]);
+                            }
 
                             OrderItem::create([
                                 'order_id' => $standardOrder->id,
@@ -294,13 +305,24 @@ class CheckoutController extends Controller
                             $item->stock = 0;
                             $item->save();
 
-                            ItemStockTransaction::create([
-                                'item_id' => $item->id,
-                                'user_id' => $user?->id,
-                                'type' => 'out',
-                                'quantity' => $fulfilledQty,
-                                'remarks' => "Order #{$standardOrder->id} - Partial fulfillment",
-                            ]);
+                            // Check for duplicate transaction to prevent duplicates
+                            // Look for existing transaction with same order, item, quantity within last minute
+                            $existingTransaction = ItemStockTransaction::where('item_id', $item->id)
+                                ->where('type', 'out')
+                                ->where('quantity', $fulfilledQty)
+                                ->where('remarks', "Order #{$standardOrder->id} - Partial fulfillment")
+                                ->where('created_at', '>=', now()->subMinute())
+                                ->first();
+
+                            if (!$existingTransaction) {
+                                ItemStockTransaction::create([
+                                    'item_id' => $item->id,
+                                    'user_id' => $user?->id,
+                                    'type' => 'out',
+                                    'quantity' => $fulfilledQty,
+                                    'remarks' => "Order #{$standardOrder->id} - Partial fulfillment",
+                                ]);
+                            }
 
                             OrderItem::create([
                                 'order_id' => $standardOrder->id,
@@ -340,7 +362,7 @@ class CheckoutController extends Controller
                         'user_id' => $user?->id,
                         'parent_order_id' => $isMixedOrder ? $parentOrder->id : null,
                         'order_type' => 'backorder',
-                        'status' => 'pending',
+                        'status' => 'processing', // Automatically set to "Awaiting Stock" for back orders
                         'total_amount' => $backorderTotal,
                         'required_payment_amount' => $isCod ? $backorderTotal : ($backorderSubtotal * 0.5),
                         'remaining_balance' => $isCod ? 0 : ($backorderSubtotal * 0.5),
