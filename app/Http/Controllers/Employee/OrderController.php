@@ -4,8 +4,16 @@ namespace App\Http\Controllers\Employee;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\Item;
+use App\Models\OrderItem;
+use App\Models\ItemStockTransaction;
+use App\Models\User;
+use App\Models\Address;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
@@ -257,6 +265,175 @@ class OrderController extends Controller
             return response()->json(['success' => true]);
         }
         return back()->with('success', 'Order deleted');
+    }
+
+    /**
+     * Store a manually-created order by an employee.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id' => 'nullable|exists:users,id',
+            'first_name' => 'required_without:user_id|string|max:100',
+            'last_name' => 'required_without:user_id|string|max:100',
+            'address' => 'required_without:user_id|string|max:1000',
+            'contact_number' => 'required_without:user_id|string|max:50',
+            'email' => 'nullable|email',
+            'payment_method' => 'nullable|in:COD,GCASH,BANK,NONE',
+            'paid' => 'nullable|boolean',
+            'recipient_name' => 'nullable|string|max:255',
+            'recipient_phone' => 'nullable|string|max:50',
+            'shipping_fee' => 'nullable|numeric|min:0',
+            'items' => 'required|array|min:1',
+            'items.*.item_id' => 'required|integer|exists:items,id',
+            'items.*.quantity' => 'required|integer|min:1',
+        ], [
+            'first_name.required_without' => 'First name is required when not selecting an existing customer.',
+            'last_name.required_without' => 'Last name is required when not selecting an existing customer.',
+            'address.required_without' => 'Address is required when not selecting an existing customer.',
+            'contact_number.required_without' => 'Contact number is required when not selecting an existing customer.',
+            'items.required' => 'Please add at least one item to the order.',
+            'items.*.item_id.exists' => 'One of the selected items does not exist.',
+            'items.*.quantity.min' => 'Quantity must be at least 1.',
+        ]);
+
+        try {
+            DB::transaction(function () use ($validated, $request, &$order) {
+                $itemsInput = $validated['items'];
+
+                // Prepare totals and backorder detection
+                $total = 0.0;
+                $hasBackorder = false;
+                $hasStandard = false;
+                $preparedItems = [];
+
+                foreach ($itemsInput as $it) {
+                    $item = Item::findOrFail($it['item_id']);
+                    $qty = (int) $it['quantity'];
+                    $price = (float) ($item->price ?? $item->unit_price ?? 0);
+                    $subtotal = $price * $qty;
+                    $is_backorder = false;
+                    if (($item->stock ?? 0) < $qty) {
+                        $is_backorder = true;
+                        $hasBackorder = true;
+                    } else {
+                        $hasStandard = true;
+                    }
+                    $total += $subtotal;
+                    $preparedItems[] = compact('item', 'qty', 'price', 'subtotal', 'is_backorder');
+                }
+
+                // Determine order_type: if any backorder exists, mark as mixed
+                if ($hasBackorder) {
+                    $orderType = Order::TYPE_MIXED;
+                } else {
+                    $orderType = Order::TYPE_STANDARD;
+                }
+
+                // Payment status logic
+                $paymentMethod = $validated['payment_method'] ?? 'NONE';
+                $paid = (bool) ($validated['paid'] ?? false);
+                $paymentStatus = 'unpaid';
+                if ($paymentMethod === 'COD') {
+                    $paymentStatus = 'pending_cod';
+                } elseif ($paid) {
+                    $paymentStatus = 'paid';
+                }
+
+                // If user_id not provided, create a guest customer record
+                $userId = $validated['user_id'] ?? null;
+                if (empty($userId)) {
+                    $guestEmail = $validated['email'] ?? ('guest_' . time() . '_' . Str::random(6) . '@example.local');
+                    $newUser = User::create([
+                        'first_name' => $validated['first_name'],
+                        'last_name' => $validated['last_name'],
+                        'email' => $guestEmail,
+                        'password' => Hash::make(Str::random(12)),
+                        'role' => 'customer',
+                        'status' => 'active',
+                    ]);
+
+                    // Create an address record if provided
+                    if (!empty($validated['address'])) {
+                        try {
+                            Address::create([
+                                'user_id' => $newUser->id,
+                                'type' => 'shipping',
+                                'address_line' => $validated['address'],
+                                'phone_number' => $validated['contact_number'] ?? null,
+                            ]);
+                        } catch (\Throwable $e) {
+                            // ignore address creation errors for now
+                        }
+                    }
+
+                    $userId = $newUser->id;
+                }
+
+                // Create order
+                $order = Order::create([
+                    'user_id' => $userId,
+                    'order_type' => $orderType,
+                    'status' => $orderType === Order::TYPE_BACKORDER ? Order::STATUS_BACKORDER : Order::STATUS_PROCESSING,
+                    'total_amount' => $total,
+                    'required_payment_amount' => 0,
+                    'remaining_balance' => 0,
+                    'payment_method' => $paymentMethod,
+                    'payment_status' => $paymentStatus,
+                    'recipient_name' => $validated['recipient_name'] ?? ($validated['first_name'] . ' ' . ($validated['last_name'] ?? '')),
+                    'recipient_phone' => $validated['recipient_phone'] ?? ($validated['contact_number'] ?? null),
+                    'shipping_fee' => $validated['shipping_fee'] ?? 0,
+                ]);
+
+                // Create order items and deduct stock for standard items
+                foreach ($preparedItems as $pi) {
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'item_id' => $pi['item']->id,
+                        'quantity' => $pi['qty'],
+                        'price' => $pi['price'],
+                        'subtotal' => $pi['subtotal'],
+                        'is_backorder' => $pi['is_backorder'],
+                        'backorder_status' => $pi['is_backorder'] ? \App\Models\OrderItem::BO_PENDING : null,
+                    ]);
+
+                    // If not a backorder, deduct stock immediately and create transaction
+                    if (!$pi['is_backorder']) {
+                        $item = Item::where('id', $pi['item']->id)->lockForUpdate()->first();
+                        $available = max(0, (int) ($item->stock ?? 0));
+                        $required = $pi['qty'];
+                        if ($available < $required) {
+                            throw new \Exception("Insufficient stock for item {$item->name}");
+                        }
+                        $item->stock = $available - $required;
+                        $item->save();
+
+                        // Create stock transaction (out)
+                        ItemStockTransaction::create([
+                            'item_id' => $item->id,
+                            'user_id' => auth()->id() ?? null,
+                            'type' => 'out',
+                            'quantity' => $required,
+                            'remarks' => "Order #{$order->id} - Employee created",
+                        ]);
+                    }
+                }
+
+                // Calculate required payment amount and remaining balance
+                $order->required_payment_amount = $order->calculateRequiredPaymentAmount();
+                if ($order->payment_status === 'paid') {
+                    $order->remaining_balance = 0;
+                } else {
+                    $order->remaining_balance = $order->required_payment_amount;
+                }
+                $order->save();
+            });
+
+            return redirect()->route('employee.orders', ['type' => ''])->with('success', 'Order created successfully!');
+        } catch (\Exception $e) {
+            \Log::error('Employee order creation failed', ['error' => $e->getMessage(), 'input' => $request->all()]);
+            return back()->withInput()->withErrors(['error' => 'Failed to create order: ' . $e->getMessage()]);
+        }
     }
 
     /**

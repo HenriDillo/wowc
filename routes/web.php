@@ -147,6 +147,7 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
 
     // Orders
     Route::get('/orders', [\App\Http\Controllers\Employee\OrderController::class, 'index'])->name('orders');
+    Route::post('/orders', [\App\Http\Controllers\Employee\OrderController::class, 'store'])->name('orders.store');
     Route::get('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'show'])->name('orders.show');
     Route::put('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'update'])->name('orders.update');
     Route::delete('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'destroy'])->name('orders.destroy');
@@ -179,8 +180,7 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::post('/returns/{id}/reject', [\App\Http\Controllers\ReturnRequestController::class, 'reject'])->name('returns.reject');
     Route::post('/returns/{id}/verify', [\App\Http\Controllers\ReturnRequestController::class, 'verifyReturn'])->name('returns.verify');
     Route::post('/returns/{id}/refund', [\App\Http\Controllers\ReturnRequestController::class, 'processRefund'])->name('returns.refund');
-    Route::post('/returns/{id}/replacement', [\App\Http\Controllers\ReturnRequestController::class, 'createReplacementOrder'])->name('returns.replacement');
-    Route::post('/returns/{id}/replacement/shipped', [\App\Http\Controllers\ReturnRequestController::class, 'markReplacementShipped'])->name('returns.replacement.shipped');
+    // Replacement routes removed - returns are refunds only
 
     // Cancellation Requests (Employee)
     Route::get('/cancellations', [\App\Http\Controllers\CancellationController::class, 'index'])->name('cancellations.index');
@@ -210,8 +210,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::post('/returns/{id}/reject', [\App\Http\Controllers\ReturnRequestController::class, 'reject'])->name('returns.reject');
     Route::post('/returns/{id}/verify', [\App\Http\Controllers\ReturnRequestController::class, 'verifyReturn'])->name('returns.verify');
     Route::post('/returns/{id}/refund', [\App\Http\Controllers\ReturnRequestController::class, 'processRefund'])->name('returns.refund');
-    Route::post('/returns/{id}/replacement', [\App\Http\Controllers\ReturnRequestController::class, 'createReplacementOrder'])->name('returns.replacement');
-    Route::post('/returns/{id}/replacement/shipped', [\App\Http\Controllers\ReturnRequestController::class, 'markReplacementShipped'])->name('returns.replacement.shipped');
+    // Replacement routes removed - returns are refunds only
 
     // Cancellation Requests (Admin - same as employee)
     Route::get('/cancellations', [\App\Http\Controllers\CancellationController::class, 'index'])->name('cancellations.index');

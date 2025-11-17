@@ -4,6 +4,7 @@
             \App\Models\ReturnRequest::STATUS_REQUESTED,
             \App\Models\ReturnRequest::STATUS_APPROVED,
             \App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+            \App\Models\ReturnRequest::STATUS_VERIFIED,
         ])
         ->isNotEmpty();
     
@@ -71,11 +72,12 @@
 @if($hasActiveReturn)
     @php
         $activeReturn = $order->returnRequests
-            ->whereIn('status', [
-                \App\Models\ReturnRequest::STATUS_REQUESTED,
-                \App\Models\ReturnRequest::STATUS_APPROVED,
-                \App\Models\ReturnRequest::STATUS_IN_TRANSIT,
-            ])
+                ->whereIn('status', [
+                    \App\Models\ReturnRequest::STATUS_REQUESTED,
+                    \App\Models\ReturnRequest::STATUS_APPROVED,
+                    \App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+                    \App\Models\ReturnRequest::STATUS_VERIFIED,
+                ])
             ->sortByDesc('created_at')
             ->first();
     @endphp
@@ -157,14 +159,7 @@
                 </div>
             @endif
 
-            @if($activeReturn->replacementOrder)
-                <div>
-                    <div class="text-sm font-medium text-gray-700">Replacement Order:</div>
-                    <a href="{{ route('customer.orders.show', $activeReturn->replacementOrder->id) }}" class="mt-1 text-sm text-[#c59d5f] hover:underline">
-                        View Order #{{ $activeReturn->replacementOrder->id }}
-                    </a>
-                </div>
-            @endif
+            {{-- Replacement orders removed: returns are refunds only --}}
         </div>
     </div>
 @endif

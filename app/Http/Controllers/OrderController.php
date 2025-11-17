@@ -42,16 +42,25 @@ class OrderController extends Controller
     public function store(Request $request)
     {
         $user = Auth::user();
-        $data = $request->validate([
+        $rules = [
             'order_type' => 'required|in:standard,backorder',
-            'payment_method' => 'nullable|in:COD,GCash,Card',
+            'payment_method' => 'nullable',
             'address' => 'nullable|array',
             'address.address_line' => 'nullable|string|max:255',
             'address.city' => 'nullable|string|max:120',
             'address.province' => 'nullable|string|max:120',
             'address.postal_code' => 'nullable|string|max:20',
             'address.phone_number' => 'nullable|string|max:30',
-        ]);
+        ];
+
+        // Restrict payment methods for backorders to GCash and Bank Transfer only
+        if ($request->input('order_type') === 'backorder') {
+            $rules['payment_method'] = 'nullable|in:GCash,Bank Transfer';
+        } else {
+            $rules['payment_method'] = 'nullable|in:COD,GCash,Card,Bank Transfer';
+        }
+
+        $data = $request->validate($rules);
 
         $cart = Session::get('cart', []);
         if (empty($cart)) {

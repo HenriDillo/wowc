@@ -20,7 +20,6 @@ class ReturnRequest extends Model
         'verified_at',
         'refund_amount',
         'refund_method',
-        'replacement_order_id',
     ];
 
     protected $casts = [
@@ -35,7 +34,6 @@ class ReturnRequest extends Model
     const STATUS_IN_TRANSIT = 'Return In Transit';
     const STATUS_VERIFIED = 'Return Verified';
     const STATUS_REFUND_COMPLETED = 'Refund Completed';
-    const STATUS_REPLACEMENT_SHIPPED = 'Replacement Shipped';
     const STATUS_COMPLETED = 'Return Completed';
 
     public static function getValidStatuses(): array
@@ -47,7 +45,6 @@ class ReturnRequest extends Model
             self::STATUS_IN_TRANSIT,
             self::STATUS_VERIFIED,
             self::STATUS_REFUND_COMPLETED,
-            self::STATUS_REPLACEMENT_SHIPPED,
             self::STATUS_COMPLETED,
         ];
     }
@@ -64,6 +61,7 @@ class ReturnRequest extends Model
 
     public function replacementOrder(): BelongsTo
     {
+        // Replacement orders have been removed; keep relation only if DB column remains
         return $this->belongsTo(Order::class, 'replacement_order_id');
     }
 
@@ -99,7 +97,6 @@ class ReturnRequest extends Model
             self::STATUS_IN_TRANSIT => 'Return In Transit',
             self::STATUS_VERIFIED => 'Return Verified',
             self::STATUS_REFUND_COMPLETED => 'Refund Completed',
-            self::STATUS_REPLACEMENT_SHIPPED => 'Replacement Shipped',
             self::STATUS_COMPLETED => 'Return Completed',
             default => $this->status,
         };
