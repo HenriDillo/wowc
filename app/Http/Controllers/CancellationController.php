@@ -820,12 +820,13 @@ class CancellationController extends Controller
     private function releaseInventory(Order $order): void
     {
         foreach ($order->items as $orderItem) {
+            $item = $orderItem->item;
+
             if (!$orderItem->is_backorder) {
                 // Standard item - release stock back
-                $item = $orderItem->item;
                 if ($item) {
                     $item->increment('stock', $orderItem->quantity);
-                    
+
                     // Log stock transaction
                     ItemStockTransaction::create([
                         'item_id' => $item->id,
@@ -835,8 +836,30 @@ class CancellationController extends Controller
                         'remarks' => "Order #{$order->id} cancelled - Stock released",
                     ]);
                 }
+                continue;
             }
-            // For backorder items, no stock was reserved, so nothing to release
+
+            // Backorder items: generally no stock was reserved. However, if a backorder
+            // item was already fulfilled (i.e. stock was deducted when order moved to
+            // preparing/ready_to_ship), we should return that stock on cancellation.
+            // Only restore stock when the order item indicates it was fulfilled.
+            try {
+                $wasFulfilled = ($orderItem->backorder_status ?? null) === \App\Models\OrderItem::BO_FULFILLED;
+            } catch (\Throwable $e) {
+                $wasFulfilled = false;
+            }
+
+            if ($wasFulfilled && $item) {
+                $item->increment('stock', $orderItem->quantity);
+
+                ItemStockTransaction::create([
+                    'item_id' => $item->id,
+                    'user_id' => Auth::id(),
+                    'type' => 'in',
+                    'quantity' => $orderItem->quantity,
+                    'remarks' => "Order #{$order->id} cancelled - Backorder fulfilled item stock returned",
+                ]);
+            }
         }
     }
 

@@ -24,7 +24,6 @@
                         'Return In Transit' => 'bg-indigo-100 text-indigo-800',
                         'Return Verified' => 'bg-green-100 text-green-800',
                         'Refund Completed' => 'bg-green-100 text-green-800',
-                        'Replacement Shipped' => 'bg-purple-100 text-purple-800',
                         'Return Completed' => 'bg-gray-100 text-gray-800',
                         default => 'bg-gray-100 text-gray-800',
                     };
@@ -85,14 +84,7 @@
                             </div>
                         @endif
 
-                        @if($returnRequest->replacementOrder)
-                            <div>
-                                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Replacement Order</div>
-                                <a href="{{ route('employee.orders.show', $returnRequest->replacementOrder->id) }}" class="mt-1 text-[#c59d5f] hover:underline">
-                                    View Order #{{ $returnRequest->replacementOrder->id }}
-                                </a>
-                            </div>
-                        @endif
+                        {{-- Replacement orders removed: returns are refunds only --}}
                     </div>
                 </div>
 
@@ -204,35 +196,10 @@
                                 </form>
                             </div>
 
-                            <!-- Replacement Order -->
-                            <div class="border-t pt-4 mt-4">
-                                <h3 class="font-medium text-gray-900 mb-3">Create Replacement</h3>
-                                <form action="{{ route('employee.returns.replacement', $returnRequest->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to create a replacement order? This will check stock availability.');">
-                                    @csrf
-                                    <button type="submit" class="w-full px-4 py-2 rounded-lg bg-purple-600 text-white font-medium hover:bg-purple-700 transition-colors">
-                                        Create Replacement Order
-                                    </button>
-                                </form>
-                            </div>
+                            {{-- Replacement orders removed: only refunds are supported now --}}
                         @endif
 
-                        @if($returnRequest->status === \App\Models\ReturnRequest::STATUS_VERIFIED && $returnRequest->replacementOrder && $returnRequest->replacementOrder->status !== 'shipped')
-                            <div class="border-t pt-4 mt-4">
-                                <h3 class="font-medium text-gray-900 mb-3">Mark Replacement Shipped</h3>
-                                <form action="{{ route('employee.returns.replacement.shipped', $returnRequest->id) }}" method="POST">
-                                    @csrf
-                                    <div class="space-y-3">
-                                        <div>
-                                            <label class="block text-sm font-medium text-gray-700 mb-1">Tracking Number</label>
-                                            <input type="text" name="tracking_number" required maxlength="100" class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:border-[#c59d5f] focus:ring-2 focus:ring-[#c59d5f]/20 text-sm" placeholder="Enter LBC tracking number">
-                                        </div>
-                                        <button type="submit" class="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors">
-                                            Mark as Shipped
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        @endif
+                        {{-- Replacement shipping removed --}}
                     </div>
                 </div>
             </div>

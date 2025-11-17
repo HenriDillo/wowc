@@ -154,7 +154,7 @@ class ReturnRequestController extends Controller
             abort(403, 'Only employees can access this page.');
         }
 
-        $query = ReturnRequest::with(['order.user', 'user', 'replacementOrder'])
+        $query = ReturnRequest::with(['order.user', 'user'])
             ->latest();
 
         // Filter by status
@@ -210,7 +210,6 @@ class ReturnRequestController extends Controller
             'order.user.address',
             'order.items.item.photos',
             'user',
-            'replacementOrder',
         ])->findOrFail($id);
 
         return view('employee.return-request-show', compact('returnRequest'));
@@ -340,7 +339,7 @@ class ReturnRequestController extends Controller
                 // Status will be updated to 'returned' or similar when refund/replacement is processed
             });
 
-            return back()->with('success', 'Return verified. You can now process refund or create replacement order.');
+            return back()->with('success', 'Return verified. You can now process refund.');
         } catch (\Exception $e) {
             \Log::error('Return verification failed', [
                 'return_id' => $id,
@@ -433,146 +432,4 @@ class ReturnRequestController extends Controller
         }
     }
 
-    /**
-     * Employee: Create replacement order
-     */
-    public function createReplacementOrder($id, Request $request)
-    {
-        $user = Auth::user();
-        if (!$user || !$user->isEmployee()) {
-            abort(403, 'Only employees can create replacement orders.');
-        }
-
-        $returnRequest = ReturnRequest::with(['order.items.item', 'order.user'])->findOrFail($id);
-
-        // Check if status allows replacement
-        if ($returnRequest->status !== ReturnRequest::STATUS_VERIFIED) {
-            return back()->withErrors(['error' => 'Replacement order can only be created after return is verified.']);
-        }
-
-        $order = $returnRequest->order;
-
-        // Validate order can still be returned
-        if ($order->status === 'cancelled') {
-            return back()->withErrors(['error' => 'Cannot create replacement order for a cancelled order.']);
-        }
-
-        // Check if replacement order already exists
-        if ($returnRequest->replacement_order_id) {
-            return back()->withErrors(['error' => 'A replacement order already exists for this return request.']);
-        }
-
-        try {
-            DB::transaction(function () use ($returnRequest, $user) {
-                $originalOrder = $returnRequest->order;
-                
-                // Create new order with same items
-                $replacementOrder = Order::create([
-                    'user_id' => $originalOrder->user_id,
-                    'order_type' => $originalOrder->order_type,
-                    'status' => Order::STATUS_PENDING,
-                    'total_amount' => $originalOrder->total_amount,
-                    'required_payment_amount' => $originalOrder->required_payment_amount,
-                    'remaining_balance' => $originalOrder->remaining_balance,
-                    'payment_method' => $originalOrder->payment_method,
-                    'payment_status' => 'unpaid',
-                    'recipient_name' => $originalOrder->recipient_name,
-                    'recipient_phone' => $originalOrder->recipient_phone,
-                ]);
-
-                // Copy order items
-                foreach ($originalOrder->items as $originalItem) {
-                    $item = $originalItem->item;
-                    
-                    // Check stock availability
-                    if ($item && $item->stock < $originalItem->quantity) {
-                        throw new \Exception("Insufficient stock for item: {$item->name}. Required: {$originalItem->quantity}, Available: {$item->stock}");
-                    }
-
-                    OrderItem::create([
-                        'order_id' => $replacementOrder->id,
-                        'item_id' => $originalItem->item_id,
-                        'quantity' => $originalItem->quantity,
-                        'price' => $originalItem->price,
-                        'subtotal' => $originalItem->subtotal,
-                        'is_backorder' => $originalItem->is_backorder,
-                        'backorder_status' => $originalItem->backorder_status,
-                    ]);
-
-                    // Reduce stock if not backorder
-                    if ($item && !$originalItem->is_backorder) {
-                        $item->stock -= $originalItem->quantity;
-                        $item->save();
-                    }
-                }
-
-                // Link replacement order to return request
-                // Note: Status will be updated to STATUS_REPLACEMENT_SHIPPED when employee marks it as shipped
-                $returnRequest->replacement_order_id = $replacementOrder->id;
-                // Keep status as VERIFIED until replacement is shipped
-                $returnRequest->save();
-            });
-
-            return back()->with('success', 'Replacement order created successfully.');
-        } catch (\Exception $e) {
-            \Log::error('Replacement order creation failed', [
-                'return_id' => $id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return back()->withErrors(['error' => 'Failed to create replacement order: ' . $e->getMessage()]);
-        }
-    }
-
-    /**
-     * Employee: Mark replacement as shipped
-     */
-    public function markReplacementShipped($id, Request $request)
-    {
-        $user = Auth::user();
-        if (!$user || !$user->isEmployee()) {
-            abort(403, 'Only employees can mark replacement as shipped.');
-        }
-
-        $returnRequest = ReturnRequest::with('replacementOrder')->findOrFail($id);
-
-        // Check if replacement order exists
-        if (!$returnRequest->replacement_order_id || !$returnRequest->replacementOrder) {
-            return back()->withErrors(['error' => 'No replacement order found for this return request.']);
-        }
-
-        // Check if status allows shipping (must be verified and have replacement order)
-        if ($returnRequest->status !== ReturnRequest::STATUS_VERIFIED) {
-            return back()->withErrors(['error' => 'Replacement order can only be marked as shipped after return is verified.']);
-        }
-
-        $validated = $request->validate([
-            'tracking_number' => 'required|string|max:100',
-        ], [
-            'tracking_number.required' => 'Please enter the tracking number.',
-            'tracking_number.max' => 'Tracking number must not exceed 100 characters.',
-        ]);
-
-        try {
-            DB::transaction(function () use ($returnRequest, $validated) {
-                $replacementOrder = $returnRequest->replacementOrder;
-                $replacementOrder->tracking_number = $validated['tracking_number'];
-                $replacementOrder->carrier = 'lbc';
-                $replacementOrder->status = Order::STATUS_PROCESSING; // or 'shipped' based on your flow
-                $replacementOrder->save();
-
-                $returnRequest->status = ReturnRequest::STATUS_COMPLETED;
-                $returnRequest->save();
-            });
-
-            return back()->with('success', 'Replacement order marked as shipped and return request completed.');
-        } catch (\Exception $e) {
-            \Log::error('Replacement shipping update failed', [
-                'return_id' => $id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return back()->withErrors(['error' => 'Failed to update replacement order. Please try again.']);
-        }
-    }
 }

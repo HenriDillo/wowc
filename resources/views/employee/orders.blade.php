@@ -5,7 +5,14 @@
 @section('content')
 
     <div class="space-y-4" x-data="ordersPage()" x-init="init()">
-        <h1 class="text-2xl font-semibold text-gray-900">Order Management</h1>
+        <div class="flex items-center justify-between">
+            <h1 class="text-2xl font-semibold text-gray-900">Order Management</h1>
+            <div>
+                <button type="button" onclick="window.dispatchEvent(new CustomEvent('open-modal', { detail: 'add-order' }))" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium shadow-sm hover:shadow-md transition-all" style="background:#c49b6e;">
+                    ➕ Add Order
+                </button>
+            </div>
+        </div>
 
         @if(session('success'))
             <div class="mt-4 p-3 rounded border border-green-200 bg-green-50 text-green-800">{{ session('success') }}</div>
@@ -274,8 +281,120 @@
 
     @push('scripts')
     <script>
-        // Scripts removed - all order management done on order-show page
+        // Existing order-page scripts kept elsewhere; modal scripts below
     </script>
+    <!-- Add Order Modal -->
+    <x-modal name="add-order" maxWidth="2xl" focusable>
+        <div x-data="{
+            rows: [{item_id: '', quantity: 1}],
+            items: @js($items ?? []),
+            users: @js($users ?? []),
+            errors: @js($errors->messages() ?? []),
+            hasErrors: @js($errors->any() ?? false),
+            addRow() { this.rows.push({item_id: '', quantity: 1}) },
+            removeRow(i) { if (this.rows.length > 1) this.rows.splice(i,1) }
+        }" class="p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">Create Order</h2>
+                <button type="button" class="text-sm text-gray-500" x-on:click="$dispatch('close-modal', 'add-order')">Close</button>
+            </div>
+
+            <!-- Error Messages -->
+            <div x-show="hasErrors" class="mb-4 p-3 rounded-lg bg-red-50 border border-red-200">
+                <p class="text-sm font-medium text-red-800 mb-2">Please fix the following errors:</p>
+                <ul class="text-sm text-red-700 space-y-1">
+                    <template x-for="(messages, field) in errors" :key="field">
+                        <template x-for="msg in messages" :key="msg">
+                            <li>• <span x-text="msg"></span></li>
+                        </template>
+                    </template>
+                </ul>
+            </div>
+
+            <form method="POST" action="{{ route('employee.orders.store') }}" class="space-y-4">
+                @csrf
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">
+                            Customer <span class="text-red-600">*</span>
+                        </label>
+                        <select name="user_id" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                            <option value="">-- Select a customer --</option>
+                            @foreach($users ?? [] as $u)
+                                <option value="{{ $u->id }}">{{ $u->name }} — {{ $u->email }}</option>
+                            @endforeach
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Customer selection is required</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Payment Method</label>
+                        <select name="payment_method" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                            <option value="NONE">None</option>
+                            <option value="COD">COD</option>
+                            <option value="GCASH">GCash</option>
+                            <option value="BANK">Bank</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Shipping Fee</label>
+                        <input type="number" step="0.01" name="shipping_fee" value="0" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Recipient Name</label>
+                        <input type="text" name="recipient_name" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Recipient Phone</label>
+                        <input type="text" name="recipient_phone" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                    <input type="checkbox" name="paid" value="1" id="paid-checkbox" class="rounded" />
+                    <label for="paid-checkbox" class="text-sm font-medium text-gray-700">Mark order as paid (payment received)</label>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-sm font-medium">Items <span class="text-gray-500 text-xs">(System will auto-detect backorder if stock insufficient)</span></h3>
+                        <button type="button" class="text-sm text-[#c49b6e]" x-on:click.prevent="addRow()">+ Add item</button>
+                    </div>
+
+                    <template x-for="(row, index) in rows" :key="index">
+                        <div class="grid grid-cols-12 gap-2 items-start mb-3 p-2 rounded-lg bg-gray-50 border border-gray-200">
+                            <div class="col-span-7">
+                                <label class="block text-xs font-medium text-gray-600 mb-1">Item</label>
+                                <select :name="`items[${index}][item_id]`" x-model="row.item_id" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                                    <option value="">-- Select item --</option>
+                                    <template x-for="it in items" :key="it.id">
+                                        <option :value="it.id" :selected="row.item_id == it.id">
+                                            <span x-text="it.name + ' (' + (it.stock ?? 0) + ' in stock, ₱' + (it.price ?? 0) + ')'"></span>
+                                        </option>
+                                    </template>
+                                </select>
+                                <p class="text-xs text-gray-500 mt-1">Requesting more than stock will create a backorder</p>
+                            </div>
+                            <div class="col-span-3">
+                                <label class="block text-xs font-medium text-gray-600 mb-1">Qty</label>
+                                <input type="number" min="1" :name="`items[${index}][quantity]`" x-model.number="row.quantity" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                            </div>
+                            <div class="col-span-2 flex items-end justify-end">
+                                <button type="button" x-on:click.prevent="removeRow(index)" class="text-sm text-red-600 hover:text-red-800 font-medium">✕ Remove</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="flex items-center gap-2 justify-end">
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-[#c49b6e] text-white font-medium">Create Order</button>
+                    <button type="button" class="px-4 py-2 rounded-lg border" x-on:click="$dispatch('close-modal', 'add-order')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </x-modal>
     @endpush
 
 @endsection
