@@ -244,9 +244,34 @@
                                             </div>
                                             <div>
                                                 <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Status</div>
-                                                <span class="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                <?php
+                                                    $isOrderCancelled = $order->status === 'cancelled';
+                                                    $latestReturn = $order->returnRequests->sortByDesc('created_at')->first();
+                                                    $isOrderReturned = $latestReturn && in_array($latestReturn->status, [
+                                                        \App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+                                                        \App\Models\ReturnRequest::STATUS_COMPLETED,
+                                                    ]);
+                                                    $statusColor = match($customOrder->status) {
+                                                        'pending_review' => 'bg-yellow-100 text-yellow-800',
+                                                        'approved' => 'bg-green-100 text-green-800',
+                                                        'rejected' => 'bg-red-100 text-red-800',
+                                                        'in_production' => 'bg-blue-100 text-blue-800',
+                                                        'completed' => 'bg-gray-100 text-gray-800',
+                                                        default => 'bg-gray-100 text-gray-800',
+                                                    };
+                                                    // Override color if order is cancelled or returned
+                                                    if ($isOrderCancelled || $isOrderReturned) {
+                                                        $statusColor = 'bg-red-100 text-red-800';
+                                                    }
+                                                ?>
+                                                <span class="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?php echo e($statusColor); ?>">
                                                     <?php echo e(str_replace('_',' ', ucfirst($customOrder->status))); ?>
 
+                                                    <?php if($isOrderCancelled): ?>
+                                                        (Cancelled)
+                                                    <?php elseif($isOrderReturned): ?>
+                                                        (Returned)
+                                                    <?php endif; ?>
                                                 </span>
                                             </div>
                                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -576,6 +601,80 @@ unset($__errorArgs, $__bag); ?>
                     </div>
                 <?php endif; ?>
 
+                <!-- Cancellation & Return Requests Section -->
+                <?php
+                    $pendingCancellation = $order->cancellationRequests
+                        ->where('status', \App\Models\CancellationRequest::STATUS_REQUESTED)
+                        ->sortByDesc('created_at')
+                        ->first();
+                    $activeReturn = $order->returnRequests
+                        ->whereIn('status', [
+                            \App\Models\ReturnRequest::STATUS_REQUESTED,
+                            \App\Models\ReturnRequest::STATUS_APPROVED,
+                            \App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+                        ])
+                        ->sortByDesc('created_at')
+                        ->first();
+                ?>
+                <?php if($pendingCancellation || $activeReturn): ?>
+                    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                        <h2 class="font-semibold text-gray-900 mb-4">Cancellation & Return Requests</h2>
+                        <div class="space-y-4">
+                            <?php if($pendingCancellation): ?>
+                                <div class="border border-yellow-200 bg-yellow-50 rounded-lg p-4">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2 mb-2">
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                    Cancellation Requested
+                                                </span>
+                                                <span class="text-xs text-gray-500">Request #<?php echo e($pendingCancellation->id); ?></span>
+                                            </div>
+                                            <p class="text-sm text-gray-700 mb-2"><strong>Reason:</strong> <?php echo e($pendingCancellation->reason); ?></p>
+                                            <p class="text-xs text-gray-600">Requested on <?php echo e($pendingCancellation->created_at->format('M d, Y g:i A')); ?></p>
+                                        </div>
+                                        <a href="<?php echo e(route('employee.cancellations.show', $pendingCancellation->id)); ?>" class="ml-4 inline-flex items-center px-3 py-1.5 rounded-lg border border-yellow-300 text-yellow-700 hover:bg-yellow-100 text-sm font-medium transition-colors">
+                                            Review & Process
+                                        </a>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if($activeReturn): ?>
+                                <div class="border border-blue-200 bg-blue-50 rounded-lg p-4">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2 mb-2">
+                                                <?php
+                                                    $returnStatusColor = match($activeReturn->status) {
+                                                        \App\Models\ReturnRequest::STATUS_REQUESTED => 'bg-yellow-100 text-yellow-800',
+                                                        \App\Models\ReturnRequest::STATUS_APPROVED => 'bg-blue-100 text-blue-800',
+                                                        \App\Models\ReturnRequest::STATUS_IN_TRANSIT => 'bg-indigo-100 text-indigo-800',
+                                                        default => 'bg-gray-100 text-gray-800',
+                                                    };
+                                                ?>
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?php echo e($returnStatusColor); ?>">
+                                                    <?php echo e($activeReturn->getStatusLabel()); ?>
+
+                                                </span>
+                                                <span class="text-xs text-gray-500">Request #<?php echo e($activeReturn->id); ?></span>
+                                            </div>
+                                            <p class="text-sm text-gray-700 mb-2"><strong>Reason:</strong> <?php echo e($activeReturn->reason); ?></p>
+                                            <p class="text-xs text-gray-600">Requested on <?php echo e($activeReturn->created_at->format('M d, Y g:i A')); ?></p>
+                                            <?php if($activeReturn->return_tracking_number): ?>
+                                                <p class="text-xs text-gray-600 mt-1"><strong>Tracking:</strong> <?php echo e($activeReturn->return_tracking_number); ?></p>
+                                            <?php endif; ?>
+                                        </div>
+                                        <a href="<?php echo e(route('employee.returns.show', $activeReturn->id)); ?>" class="ml-4 inline-flex items-center px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-100 text-sm font-medium transition-colors">
+                                            Review & Process
+                                        </a>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
                 <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                     <h2 class="font-semibold text-gray-900">Employee Notes</h2>
                     <div class="mt-3">
@@ -832,11 +931,59 @@ unset($__errorArgs, $__bag); ?>
                                     <span class="text-blue-900">Remaining Balance (50%):</span>
                                     <span class="text-blue-900">₱<?php echo e(number_format($order->remaining_balance ?? ($order->total_amount * 0.5), 2)); ?></span>
                                 </div>
+                                <div class="mt-2 text-xs text-blue-700 italic">
+                                    To be collected by courier
+                                </div>
                             </div>
                         <?php else: ?>
                             <div class="border-t border-gray-200 pt-3 flex justify-between font-semibold">
                                 <span>Total:</span>
                                 <span>₱<?php echo e(number_format($order->total_amount, 2)); ?></span>
+                            </div>
+                        <?php endif; ?>
+
+                        <!-- Final Payment Verification (for 50% upfront orders) -->
+                        <?php
+                            $requiresFinalVerification = $order->requiresFinalPaymentVerification();
+                            $hasFinalPaymentVerified = $order->hasFinalPaymentVerified();
+                            $hasRemainingBalance = ($order->remaining_balance ?? 0) > 0;
+                        ?>
+                        <?php if($requiresFinalVerification && $hasRemainingBalance): ?>
+                            <div class="border-t border-gray-200 pt-4 mt-4">
+                                <h3 class="text-sm font-semibold text-gray-900 mb-3">Final Payment Verification</h3>
+                                <div class="space-y-3">
+                                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="text-sm font-medium text-amber-900">Remaining Balance:</span>
+                                            <span class="text-sm font-semibold text-amber-900">₱<?php echo e(number_format($order->remaining_balance, 2)); ?></span>
+                                        </div>
+                                        <p class="text-xs text-amber-800">This balance was collected by the LBC courier upon delivery.</p>
+                                    </div>
+                                    
+                                    <?php if($hasFinalPaymentVerified): ?>
+                                        <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                                            <p class="text-sm text-green-800 font-medium mb-1">✓ Final Payment Verified</p>
+                                            <?php if($order->finalPaymentVerifier): ?>
+                                                <p class="text-xs text-green-700">
+                                                    Verified by <?php echo e($order->finalPaymentVerifier->name ?? 'N/A'); ?>
+
+                                                    <?php if($order->final_payment_verified_at): ?>
+                                                        on <?php echo e($order->final_payment_verified_at->format('M d, Y g:i A')); ?>
+
+                                                    <?php endif; ?>
+                                                </p>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <form method="POST" action="<?php echo e(route('employee.orders.verify-final-payment', $order->id)); ?>" onsubmit="return confirm('Verify that the remaining balance of ₱<?php echo e(number_format($order->remaining_balance, 2)); ?> has been collected by the courier?');">
+                                            <?php echo csrf_field(); ?>
+                                            <button type="submit" class="w-full px-4 py-2 rounded-md text-white font-medium hover:opacity-95 transition-opacity bg-green-600 hover:bg-green-700">
+                                                ✓ Verify Final Payment
+                                            </button>
+                                            <p class="mt-2 text-xs text-gray-600 text-center">Click to confirm that the courier has collected the remaining balance.</p>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         <?php endif; ?>
                     </div>

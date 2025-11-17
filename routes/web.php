@@ -48,6 +48,14 @@ Route::middleware('auth')->group(function () {
 Route::middleware('auth')->prefix('customer')->name('customer.')->group(function () {
     Route::get('/orders', [CustomerOrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{id}', [CustomerOrderController::class, 'show'])->name('orders.show');
+    // Cancellation request
+    Route::post('/orders/{order}/cancel', [\App\Http\Controllers\CancellationController::class, 'requestCancel'])->name('orders.cancel');
+});
+
+// Customer return requests (authenticated)
+Route::middleware('auth')->group(function () {
+    Route::post('/returns/{order}/request', [\App\Http\Controllers\ReturnRequestController::class, 'store'])->name('returns.request');
+    Route::post('/returns/{returnId}/tracking', [\App\Http\Controllers\ReturnRequestController::class, 'submitTrackingNumber'])->name('returns.tracking');
 });
 
 // Role-based dashboard
@@ -144,6 +152,8 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::delete('/orders/{id}', [\App\Http\Controllers\Employee\OrderController::class, 'destroy'])->name('orders.destroy');
     // Payment verification
     Route::post('/orders/{id}/verify-payment', [\App\Http\Controllers\Employee\OrderController::class, 'verifyPayment'])->name('orders.verify-payment');
+    // Final payment verification (for 50% upfront orders)
+    Route::post('/orders/{id}/verify-final-payment', [\App\Http\Controllers\Employee\OrderController::class, 'verifyFinalPayment'])->name('orders.verify-final-payment');
     // COD collection
     Route::post('/orders/{id}/collect-cod', [\App\Http\Controllers\Employee\OrderController::class, 'collectCod'])->name('orders.collect-cod');
     // Per-order-item backorder updates
@@ -161,6 +171,24 @@ Route::middleware('auth')->prefix('employee')->name('employee.')->group(function
     Route::get('/reports/sales', [ReportController::class, 'salesReport'])->name('reports.sales');
     Route::get('/reports/inventory', [ReportController::class, 'inventoryReport'])->name('reports.inventory');
     Route::get('/reports/calendar', [ReportController::class, 'calendar'])->name('reports.calendar');
+
+    // Return Requests (Employee)
+    Route::get('/returns', [\App\Http\Controllers\ReturnRequestController::class, 'index'])->name('returns.index');
+    Route::get('/returns/{id}', [\App\Http\Controllers\ReturnRequestController::class, 'show'])->name('returns.show');
+    Route::post('/returns/{id}/approve', [\App\Http\Controllers\ReturnRequestController::class, 'approve'])->name('returns.approve');
+    Route::post('/returns/{id}/reject', [\App\Http\Controllers\ReturnRequestController::class, 'reject'])->name('returns.reject');
+    Route::post('/returns/{id}/verify', [\App\Http\Controllers\ReturnRequestController::class, 'verifyReturn'])->name('returns.verify');
+    Route::post('/returns/{id}/refund', [\App\Http\Controllers\ReturnRequestController::class, 'processRefund'])->name('returns.refund');
+    Route::post('/returns/{id}/replacement', [\App\Http\Controllers\ReturnRequestController::class, 'createReplacementOrder'])->name('returns.replacement');
+    Route::post('/returns/{id}/replacement/shipped', [\App\Http\Controllers\ReturnRequestController::class, 'markReplacementShipped'])->name('returns.replacement.shipped');
+
+    // Cancellation Requests (Employee)
+    Route::get('/cancellations', [\App\Http\Controllers\CancellationController::class, 'index'])->name('cancellations.index');
+    Route::get('/cancellations/{id}', [\App\Http\Controllers\CancellationController::class, 'show'])->name('cancellations.show');
+    Route::post('/cancellations/{id}/approve', [\App\Http\Controllers\CancellationController::class, 'approve'])->name('cancellations.approve');
+    Route::post('/cancellations/{id}/reject', [\App\Http\Controllers\CancellationController::class, 'reject'])->name('cancellations.reject');
+    Route::post('/cancellations/{id}/refund', [\App\Http\Controllers\CancellationController::class, 'processRefund'])->name('cancellations.refund');
+    Route::post('/orders/{order}/force-cancel', [\App\Http\Controllers\CancellationController::class, 'forceCancelByEmployee'])->name('orders.force-cancel');
 });
 
 // Admin routes (authenticated, prefixed and named)
@@ -174,6 +202,24 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::post('/stock/items/{item}/add', [StockController::class, 'addItemStock'])->name('stock.items.add');
     Route::post('/stock/materials/{material}/add', [StockController::class, 'addMaterialStock'])->name('stock.materials.add');
     Route::post('/stock/materials/{material}/reduce', [StockController::class, 'reduceMaterialStock'])->name('stock.materials.reduce');
+
+    // Return Requests (Admin - same as employee)
+    Route::get('/returns', [\App\Http\Controllers\ReturnRequestController::class, 'index'])->name('returns.index');
+    Route::get('/returns/{id}', [\App\Http\Controllers\ReturnRequestController::class, 'show'])->name('returns.show');
+    Route::post('/returns/{id}/approve', [\App\Http\Controllers\ReturnRequestController::class, 'approve'])->name('returns.approve');
+    Route::post('/returns/{id}/reject', [\App\Http\Controllers\ReturnRequestController::class, 'reject'])->name('returns.reject');
+    Route::post('/returns/{id}/verify', [\App\Http\Controllers\ReturnRequestController::class, 'verifyReturn'])->name('returns.verify');
+    Route::post('/returns/{id}/refund', [\App\Http\Controllers\ReturnRequestController::class, 'processRefund'])->name('returns.refund');
+    Route::post('/returns/{id}/replacement', [\App\Http\Controllers\ReturnRequestController::class, 'createReplacementOrder'])->name('returns.replacement');
+    Route::post('/returns/{id}/replacement/shipped', [\App\Http\Controllers\ReturnRequestController::class, 'markReplacementShipped'])->name('returns.replacement.shipped');
+
+    // Cancellation Requests (Admin - same as employee)
+    Route::get('/cancellations', [\App\Http\Controllers\CancellationController::class, 'index'])->name('cancellations.index');
+    Route::get('/cancellations/{id}', [\App\Http\Controllers\CancellationController::class, 'show'])->name('cancellations.show');
+    Route::post('/cancellations/{id}/approve', [\App\Http\Controllers\CancellationController::class, 'approve'])->name('cancellations.approve');
+    Route::post('/cancellations/{id}/reject', [\App\Http\Controllers\CancellationController::class, 'reject'])->name('cancellations.reject');
+    Route::post('/cancellations/{id}/refund', [\App\Http\Controllers\CancellationController::class, 'processRefund'])->name('cancellations.refund');
+    Route::post('/orders/{order}/force-cancel', [\App\Http\Controllers\CancellationController::class, 'forceCancelByEmployee'])->name('orders.force-cancel');
 });
 
 require __DIR__.'/auth.php';

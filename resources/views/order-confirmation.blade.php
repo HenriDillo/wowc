@@ -40,57 +40,117 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 				<h1 class="text-2xl font-semibold text-gray-900">{{ request()->is('customer/*') ? 'Order Details' : 'Thank you for your order!' }}</h1>
 				<p class="mt-2 text-gray-600">Order <span class="font-medium text-gray-900">#{{ $order->id }}</span> • {{ $order->created_at?->format('M d, Y') }}</p>
 				@php
-					// Status color mapping for all possible statuses
-					$statusColor = [
-						'pending' => 'bg-yellow-100 text-yellow-800',
-						'processing' => 'bg-blue-100 text-blue-800',
-						'ready_to_ship' => 'bg-indigo-100 text-indigo-800',
-						'shipped' => 'bg-purple-100 text-purple-800',
-						'delivered' => 'bg-green-100 text-green-800',
-						'completed' => 'bg-green-100 text-green-800',
-						'cancelled' => 'bg-red-100 text-red-800',
-						'backorder' => 'bg-indigo-100 text-indigo-800',
-						'in_design' => 'bg-blue-100 text-blue-800',
-						'in_production' => 'bg-indigo-100 text-indigo-800',
-						'ready_for_delivery' => 'bg-purple-100 text-purple-800',
-					][$order->status] ?? 'bg-gray-100 text-gray-800';
+					// Check for cancellation and return requests
+					$latestCancellation = $order->cancellationRequests->sortByDesc('created_at')->first();
+					$latestReturn = $order->returnRequests->sortByDesc('created_at')->first();
 					
-					// Friendly status labels based on order type
-					$statusLabels = [
-						'standard' => [
-							'pending' => 'Order Placed',
-							'processing' => 'Processing',
-							'ready_to_ship' => 'Ready to Ship',
-							'shipped' => 'Shipped',
-							'delivered' => 'Delivered',
-							'completed' => 'Completed',
-							'cancelled' => 'Cancelled',
-						],
-						'backorder' => [
-							'pending' => 'Order Placed',
-							'processing' => 'Awaiting Stock',
-							'ready_to_ship' => 'Preparing to Ship',
-							'shipped' => 'Shipped',
-							'delivered' => 'Delivered',
-							'completed' => 'Completed',
-							'cancelled' => 'Cancelled',
-						],
-						'custom' => [
-							'pending' => 'Awaiting Price',
-							'in_design' => 'In Design',
-							'in_production' => 'In Production',
-							'ready_for_delivery' => 'Ready for Delivery',
-							'ready_to_ship' => 'Ready to Ship',
-							'shipped' => 'Shipped',
-							'delivered' => 'Delivered',
-							'completed' => 'Completed',
-							'cancelled' => 'Cancelled',
-						],
-					];
+					// Determine the primary status to display
+					$displayStatus = null;
+					$displayStatusColor = null;
+					$displayStatusLabel = null;
 					
-					$orderType = $order->order_type;
-					$currentStatus = $order->status;
-					$statusLabel = $statusLabels[$orderType][$currentStatus] ?? ucwords(str_replace('_', ' ', $currentStatus));
+					// Priority: Cancelled > Return > Cancellation Request > Return Request > Order Status
+					if ($order->status === 'cancelled') {
+						$displayStatus = 'cancelled';
+						$displayStatusColor = 'bg-red-100 text-red-800';
+						$displayStatusLabel = 'Cancelled';
+					} elseif ($latestReturn && in_array($latestReturn->status, [
+						\App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+						\App\Models\ReturnRequest::STATUS_COMPLETED,
+					])) {
+						$displayStatus = 'returned';
+						$displayStatusColor = 'bg-purple-100 text-purple-800';
+						$displayStatusLabel = 'Returned';
+					} elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_VERIFIED) {
+						$displayStatus = 'return_verified';
+						$displayStatusColor = 'bg-green-100 text-green-800';
+						$displayStatusLabel = 'Return Verified';
+					} elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_IN_TRANSIT) {
+						$displayStatus = 'return_in_transit';
+						$displayStatusColor = 'bg-indigo-100 text-indigo-800';
+						$displayStatusLabel = 'Return In Transit';
+					} elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_APPROVED) {
+						$displayStatus = 'return_approved';
+						$displayStatusColor = 'bg-blue-100 text-blue-800';
+						$displayStatusLabel = 'Return Approved';
+					} elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_REQUESTED) {
+						$displayStatus = 'return_requested';
+						$displayStatusColor = 'bg-yellow-100 text-yellow-800';
+						$displayStatusLabel = 'Return Requested';
+					} elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED) {
+						$displayStatus = 'cancelled_refunded';
+						$displayStatusColor = 'bg-green-100 text-green-800';
+						$displayStatusLabel = 'Cancelled - Refunded';
+					} elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING) {
+						$displayStatus = 'cancellation_refund_processing';
+						$displayStatusColor = 'bg-indigo-100 text-indigo-800';
+						$displayStatusLabel = 'Cancellation - Refund Processing';
+					} elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_APPROVED) {
+						$displayStatus = 'cancellation_approved';
+						$displayStatusColor = 'bg-blue-100 text-blue-800';
+						$displayStatusLabel = 'Cancellation Approved';
+					} elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED) {
+						$displayStatus = 'cancellation_requested';
+						$displayStatusColor = 'bg-yellow-100 text-yellow-800';
+						$displayStatusLabel = 'Cancellation Requested';
+					} elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REJECTED) {
+						$displayStatus = 'cancellation_rejected';
+						$displayStatusColor = 'bg-red-100 text-red-800';
+						$displayStatusLabel = 'Cancellation Rejected';
+					} else {
+						// Use normal order status
+						$statusColor = [
+							'pending' => 'bg-yellow-100 text-yellow-800',
+							'processing' => 'bg-blue-100 text-blue-800',
+							'ready_to_ship' => 'bg-indigo-100 text-indigo-800',
+							'shipped' => 'bg-purple-100 text-purple-800',
+							'delivered' => 'bg-green-100 text-green-800',
+							'completed' => 'bg-green-100 text-green-800',
+							'cancelled' => 'bg-red-100 text-red-800',
+							'backorder' => 'bg-indigo-100 text-indigo-800',
+							'in_design' => 'bg-blue-100 text-blue-800',
+							'in_production' => 'bg-indigo-100 text-indigo-800',
+							'ready_for_delivery' => 'bg-purple-100 text-purple-800',
+						][$order->status] ?? 'bg-gray-100 text-gray-800';
+						
+						// Friendly status labels based on order type
+						$statusLabels = [
+							'standard' => [
+								'pending' => 'Order Placed',
+								'processing' => 'Processing',
+								'ready_to_ship' => 'Ready to Ship',
+								'shipped' => 'Shipped',
+								'delivered' => 'Delivered',
+								'completed' => 'Completed',
+								'cancelled' => 'Cancelled',
+							],
+							'backorder' => [
+								'pending' => 'Order Placed',
+								'processing' => 'Awaiting Stock',
+								'ready_to_ship' => 'Preparing to Ship',
+								'shipped' => 'Shipped',
+								'delivered' => 'Delivered',
+								'completed' => 'Completed',
+								'cancelled' => 'Cancelled',
+							],
+							'custom' => [
+								'pending' => 'Awaiting Price',
+								'in_design' => 'In Design',
+								'in_production' => 'In Production',
+								'ready_for_delivery' => 'Ready for Delivery',
+								'ready_to_ship' => 'Ready to Ship',
+								'shipped' => 'Shipped',
+								'delivered' => 'Delivered',
+								'completed' => 'Completed',
+								'cancelled' => 'Cancelled',
+							],
+						];
+						
+						$orderType = $order->order_type;
+						$currentStatus = $order->status;
+						$displayStatusLabel = $statusLabels[$orderType][$currentStatus] ?? ucwords(str_replace('_', ' ', $currentStatus));
+						$displayStatusColor = $statusColor;
+					}
 					
                     $hasBackorder = $order->items->contains(fn($oi) => ($oi->is_backorder ?? false));
                     $isCustomOrder = $order->order_type === 'custom';
@@ -98,7 +158,17 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 				@endphp
                 <div class="mt-2 text-sm flex flex-wrap gap-2">
 					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize bg-gray-100 text-gray-800">Type: {{ $order->order_type }}</span>
-					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $statusColor }}">Status: {{ $statusLabel }}</span>
+					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $displayStatusColor }}">Status: {{ $displayStatusLabel }}</span>
+					@if($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED)
+						<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">⚠️ Cancellation Pending</span>
+					@endif
+					@if($latestReturn && in_array($latestReturn->status, [
+						\App\Models\ReturnRequest::STATUS_REQUESTED,
+						\App\Models\ReturnRequest::STATUS_APPROVED,
+						\App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+					]))
+						<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">🔄 Return In Progress</span>
+					@endif
                 </div>
 
                 <!-- Parent-Sub Order Info -->
@@ -137,39 +207,141 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                     @php
                         $standardItems = $order->items->filter(fn($oi) => !($oi->is_backorder ?? false));
                         $backOrderItems = $order->items->filter(fn($oi) => ($oi->is_backorder ?? false));
+                        $isOrderCancelled = $order->status === 'cancelled';
                         $isOrderCompleted = in_array($order->status, ['delivered', 'completed']);
                         $isOrderShipped = in_array($order->status, ['shipped', 'delivered', 'completed']);
                         $isOrderProcessing = in_array($order->status, ['processing', 'ready_to_ship', 'shipped', 'delivered', 'completed']);
+                        $latestCancellation = $order->cancellationRequests->sortByDesc('created_at')->first();
+                        $latestReturn = $order->returnRequests->sortByDesc('created_at')->first();
                     @endphp
-                    <div class="mt-4 p-4 rounded-md border border-blue-200 bg-blue-50">
-                        <h3 class="font-medium text-blue-900">Order Status</h3>
-                        <div class="mt-2 text-sm text-blue-800 space-y-1">
-                            @if($standardItems->isNotEmpty())
-                                @if($isOrderCompleted)
-                                    <p><strong>✓ Standard Items:</strong> Delivered</p>
-                                @elseif($isOrderShipped)
-                                    <p><strong>✓ Standard Items:</strong> Shipped</p>
-                                @elseif($isOrderProcessing)
-                                    <p><strong>✓ Standard Items:</strong> Processing</p>
-                                @else
-                                    <p><strong>✓ Standard Items:</strong> Ready for processing and will ship soon</p>
+                    <div class="mt-4 p-4 rounded-md border {{ $isOrderCancelled ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-blue-50' }}">
+                        <h3 class="font-medium {{ $isOrderCancelled ? 'text-red-900' : 'text-blue-900' }}">Order Status</h3>
+                        <div class="mt-2 text-sm {{ $isOrderCancelled ? 'text-red-800' : 'text-blue-800' }} space-y-1">
+                            @if($isOrderCancelled)
+                                <p><strong>✗ Order:</strong> Cancelled</p>
+                                @if($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED)
+                                    <p><strong>✓ Refund:</strong> Completed</p>
+                                @elseif($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING)
+                                    <p><strong>⏳ Refund:</strong> Processing</p>
                                 @endif
-                            @endif
-                            @if($backOrderItems->isNotEmpty())
-                                @if($isOrderCompleted)
-                                    <p><strong>✓ Back Order Items:</strong> Delivered</p>
-                                @elseif($isOrderShipped)
-                                    <p><strong>✓ Back Order Items:</strong> Shipped</p>
-                                @elseif($order->status === 'ready_to_ship')
-                                    <p><strong>✓ Back Order Items:</strong> Preparing to ship</p>
-                                @else
-                                    <p><strong>⏳ Back Order Items:</strong> Awaiting stock - will ship separately once restocked</p>
+                                
+                                @if($latestCancellation && ($latestCancellation->refund_amount || $latestCancellation->refund_method))
+                                    <div class="mt-3 pt-3 border-t border-red-200">
+                                        <h4 class="text-sm font-semibold text-gray-900 mb-2">Refund Details</h4>
+                                        <div class="space-y-1.5 text-xs">
+                                            @if($latestCancellation->refund_amount)
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Refund Amount:</span>
+                                                    <span class="font-semibold text-gray-900">₱{{ number_format($latestCancellation->refund_amount, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            @if($latestCancellation->refund_method)
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Refund Method:</span>
+                                                    <span class="font-medium text-gray-900">{{ ucfirst(str_replace('_', ' ', $latestCancellation->refund_method)) }}</span>
+                                                </div>
+                                            @endif
+                                            @if($latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED)
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Status:</span>
+                                                    <span class="font-medium text-green-700">Completed</span>
+                                                </div>
+                                            @elseif($latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING)
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Status:</span>
+                                                    <span class="font-medium text-indigo-700">Processing</span>
+                                                </div>
+                                            @elseif($latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_FAILED)
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Status:</span>
+                                                    <span class="font-medium text-red-700">Failed</span>
+                                                </div>
+                                            @endif
+                                            @if($latestCancellation->handledBy)
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Processed By:</span>
+                                                    <span class="text-gray-900">{{ $latestCancellation->handledBy->name }}</span>
+                                                </div>
+                                            @endif
+                                            @if($latestCancellation->updated_at)
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Processed Date:</span>
+                                                    <span class="text-gray-900">{{ $latestCancellation->updated_at->format('M d, Y h:i A') }}</span>
+                                                </div>
+                                            @endif
+                                            @php
+                                                // Extract transaction ID from notes if available
+                                                $transactionId = null;
+                                                if ($latestCancellation->notes) {
+                                                    if (preg_match('/Transaction ID:\s*([^\n]+)/i', $latestCancellation->notes, $matches)) {
+                                                        $transactionId = trim($matches[1]);
+                                                    } elseif (preg_match('/Refund Processed:.*?Transaction ID:\s*([^\n]+)/i', $latestCancellation->notes, $matches)) {
+                                                        $transactionId = trim($matches[1]);
+                                                    }
+                                                }
+                                            @endphp
+                                            @if($transactionId)
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Transaction ID:</span>
+                                                    <span class="text-gray-900 font-mono text-xs">{{ $transactionId }}</span>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endif
+                            @elseif($latestReturn && in_array($latestReturn->status, [
+                                \App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+                                \App\Models\ReturnRequest::STATUS_COMPLETED,
+                            ]))
+                                <p><strong>✓ Order:</strong> Returned</p>
+                            @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_VERIFIED)
+                                <p><strong>✓ Return:</strong> Verified - Refund processing</p>
+                            @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_IN_TRANSIT)
+                                <p><strong>🔄 Return:</strong> In Transit</p>
+                            @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_APPROVED)
+                                <p><strong>✓ Return:</strong> Approved - Please submit tracking number</p>
+                            @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_REQUESTED)
+                                <p><strong>⏳ Return:</strong> Request Pending Review</p>
+                            @elseif($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED)
+                                <p><strong>⏳ Cancellation:</strong> Request Pending Review</p>
+                            @elseif($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_APPROVED)
+                                <p><strong>✓ Cancellation:</strong> Approved</p>
+                            @else
+                                @if($standardItems->isNotEmpty())
+                                    @if($isOrderCompleted)
+                                        <p><strong>✓ Standard Items:</strong> Delivered</p>
+                                    @elseif($isOrderShipped)
+                                        <p><strong>✓ Standard Items:</strong> Shipped</p>
+                                    @elseif($isOrderProcessing)
+                                        <p><strong>✓ Standard Items:</strong> Processing</p>
+                                    @else
+                                        <p><strong>✓ Standard Items:</strong> Ready for processing and will ship soon</p>
+                                    @endif
+                                @endif
+                                @if($backOrderItems->isNotEmpty())
+                                    @if($isOrderCompleted)
+                                        <p><strong>✓ Back Order Items:</strong> Delivered</p>
+                                    @elseif($isOrderShipped)
+                                        <p><strong>✓ Back Order Items:</strong> Shipped</p>
+                                    @elseif($order->status === 'ready_to_ship')
+                                        <p><strong>✓ Back Order Items:</strong> Preparing to ship</p>
+                                    @else
+                                        <p><strong>⏳ Back Order Items:</strong> Awaiting stock - will ship separately once restocked</p>
+                                    @endif
                                 @endif
                             @endif
                         </div>
                     </div>
-                @endif                @if($isCustomOrder && $customOrder)
+                @endif
+
+                @if($isCustomOrder && $customOrder)
                     @php
+                        $isOrderCancelled = $order->status === 'cancelled';
+                        $latestReturn = $order->returnRequests->sortByDesc('created_at')->first();
+                        $isOrderReturned = $latestReturn && in_array($latestReturn->status, [
+                            \App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+                            \App\Models\ReturnRequest::STATUS_COMPLETED,
+                        ]);
                         $customStatusColor = match($customOrder->status) {
                             'pending_review' => 'bg-yellow-100 text-yellow-800',
                             'approved' => 'bg-green-100 text-green-800',
@@ -178,13 +350,20 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                             'completed' => 'bg-gray-100 text-gray-800',
                             default => 'bg-gray-100 text-gray-800',
                         };
+                        $borderColor = $customOrder->status === 'rejected' || $isOrderCancelled || $isOrderReturned ? 'border-red-200 bg-red-50' : ($customOrder->status === 'approved' ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50');
+                        $textColor = $customOrder->status === 'rejected' || $isOrderCancelled || $isOrderReturned ? 'text-red-900' : ($customOrder->status === 'approved' ? 'text-green-900' : 'text-yellow-900');
+                        $contentColor = $customOrder->status === 'rejected' || $isOrderCancelled || $isOrderReturned ? 'text-red-800' : ($customOrder->status === 'approved' ? 'text-green-800' : 'text-yellow-800');
                     @endphp
-                    <div class="mt-4 p-4 rounded-md border {{ $customOrder->status === 'rejected' ? 'border-red-200 bg-red-50' : ($customOrder->status === 'approved' ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50') }}">
-                        <h3 class="font-medium {{ $customOrder->status === 'rejected' ? 'text-red-900' : ($customOrder->status === 'approved' ? 'text-green-900' : 'text-yellow-900') }}">Custom Order Status</h3>
-                        <div class="mt-2 text-sm {{ $customOrder->status === 'rejected' ? 'text-red-800' : ($customOrder->status === 'approved' ? 'text-green-800' : 'text-yellow-800') }} space-y-2">
+                    <div class="mt-4 p-4 rounded-md border {{ $borderColor }}">
+                        <h3 class="font-medium {{ $textColor }}">Custom Order Status</h3>
+                        <div class="mt-2 text-sm {{ $contentColor }} space-y-2">
                             <p><strong>Status:</strong> <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $customStatusColor }}">{{ str_replace('_', ' ', ucfirst($customOrder->status)) }}</span></p>
                             
-                            @if($customOrder->status === \App\Models\CustomOrder::STATUS_APPROVED)
+                            @if($isOrderCancelled)
+                                <p class="italic">Your custom order has been cancelled.</p>
+                            @elseif($isOrderReturned)
+                                <p class="italic">Your custom order has been returned.</p>
+                            @elseif($customOrder->status === \App\Models\CustomOrder::STATUS_APPROVED)
                                 @php
                                     $orderStatus = $customOrder->order->status ?? 'pending';
                                     $isOrderCompleted = in_array($orderStatus, ['delivered', 'completed']);
@@ -369,18 +548,163 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                             <!-- Standard Items Section -->
                             @if($standardItems->isNotEmpty())
                                 @php
+                                    $isOrderCancelled = $order->status === 'cancelled';
                                     $isOrderCompleted = in_array($order->status, ['delivered', 'completed']);
                                     $isOrderShipped = in_array($order->status, ['shipped', 'delivered', 'completed']);
                                     $isOrderProcessing = in_array($order->status, ['processing', 'ready_to_ship', 'shipped', 'delivered', 'completed']);
-                                    $standardStatusLabel = $isOrderCompleted ? 'Delivered' : ($isOrderShipped ? 'Shipped' : ($order->status === 'ready_to_ship' ? 'Ready to Ship' : ($isOrderProcessing ? 'Processing' : 'Ready for processing')));
-                                    $standardStatusColor = $isOrderCompleted ? 'bg-green-100 text-green-800' : ($isOrderShipped ? 'bg-purple-100 text-purple-800' : ($order->status === 'ready_to_ship' ? 'bg-indigo-100 text-indigo-800' : ($isOrderProcessing ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800')));
+                                    $latestCancellation = $order->cancellationRequests->sortByDesc('created_at')->first();
+                                    $latestReturn = $order->returnRequests->sortByDesc('created_at')->first();
+                                    
+                                    // Determine status based on cancellation/return first
+                                    if ($isOrderCancelled) {
+                                        $standardStatusLabel = 'Cancelled';
+                                        $standardStatusColor = 'bg-red-100 text-red-800';
+                                    } elseif ($latestReturn && in_array($latestReturn->status, [
+                                        \App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+                                        \App\Models\ReturnRequest::STATUS_COMPLETED,
+                                    ])) {
+                                        $standardStatusLabel = 'Returned';
+                                        $standardStatusColor = 'bg-purple-100 text-purple-800';
+                                    } elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_VERIFIED) {
+                                        $standardStatusLabel = 'Return Verified';
+                                        $standardStatusColor = 'bg-green-100 text-green-800';
+                                    } elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_IN_TRANSIT) {
+                                        $standardStatusLabel = 'Return In Transit';
+                                        $standardStatusColor = 'bg-indigo-100 text-indigo-800';
+                                    } elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_APPROVED) {
+                                        $standardStatusLabel = 'Return Approved';
+                                        $standardStatusColor = 'bg-blue-100 text-blue-800';
+                                    } elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_REQUESTED) {
+                                        $standardStatusLabel = 'Return Requested';
+                                        $standardStatusColor = 'bg-yellow-100 text-yellow-800';
+                                    } elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED) {
+                                        $standardStatusLabel = 'Cancelled - Refunded';
+                                        $standardStatusColor = 'bg-green-100 text-green-800';
+                                    } elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING) {
+                                        $standardStatusLabel = 'Refund Processing';
+                                        $standardStatusColor = 'bg-indigo-100 text-indigo-800';
+                                    } elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_APPROVED) {
+                                        $standardStatusLabel = 'Cancellation Approved';
+                                        $standardStatusColor = 'bg-blue-100 text-blue-800';
+                                    } elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED) {
+                                        $standardStatusLabel = 'Cancellation Requested';
+                                        $standardStatusColor = 'bg-yellow-100 text-yellow-800';
+                                    } else {
+                                        $standardStatusLabel = $isOrderCompleted ? 'Delivered' : ($isOrderShipped ? 'Shipped' : ($order->status === 'ready_to_ship' ? 'Ready to Ship' : ($isOrderProcessing ? 'Processing' : 'Ready for processing')));
+                                        $standardStatusColor = $isOrderCompleted ? 'bg-green-100 text-green-800' : ($isOrderShipped ? 'bg-purple-100 text-purple-800' : ($order->status === 'ready_to_ship' ? 'bg-indigo-100 text-indigo-800' : ($isOrderProcessing ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800')));
+                                    }
                                 @endphp
                                 <div class="mt-4">
                                     <div class="flex items-center gap-2 mb-3">
                                         <h3 class="font-medium text-gray-900">Standard Items</h3>
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $standardStatusColor }}">{{ $standardStatusLabel }}</span>
                                     </div>
-                                    @if($isOrderCompleted)
+                                    @if($isOrderCancelled)
+                                        <div class="p-3 mb-3 bg-red-50 border border-red-100 rounded-lg">
+                                            <p class="text-sm text-red-700">✗ This order has been cancelled.</p>
+                                            @if($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED)
+                                                <p class="text-sm text-green-700 mt-1">✓ Refund has been processed.</p>
+                                            @elseif($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING)
+                                                <p class="text-sm text-indigo-700 mt-1">⏳ Refund is being processed.</p>
+                                            @endif
+                                            
+                                            @if($latestCancellation && ($latestCancellation->refund_amount || $latestCancellation->refund_method))
+                                                <div class="mt-3 pt-3 border-t border-red-200">
+                                                    <h4 class="text-sm font-semibold text-gray-900 mb-2">Refund Details</h4>
+                                                    <div class="space-y-1.5 text-xs">
+                                                        @if($latestCancellation->refund_amount)
+                                                            <div class="flex justify-between">
+                                                                <span class="text-gray-600">Refund Amount:</span>
+                                                                <span class="font-semibold text-gray-900">₱{{ number_format($latestCancellation->refund_amount, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        @if($latestCancellation->refund_method)
+                                                            <div class="flex justify-between">
+                                                                <span class="text-gray-600">Refund Method:</span>
+                                                                <span class="font-medium text-gray-900">{{ ucfirst(str_replace('_', ' ', $latestCancellation->refund_method)) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        @if($latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED)
+                                                            <div class="flex justify-between">
+                                                                <span class="text-gray-600">Status:</span>
+                                                                <span class="font-medium text-green-700">Completed</span>
+                                                            </div>
+                                                        @elseif($latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING)
+                                                            <div class="flex justify-between">
+                                                                <span class="text-gray-600">Status:</span>
+                                                                <span class="font-medium text-indigo-700">Processing</span>
+                                                            </div>
+                                                        @elseif($latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_FAILED)
+                                                            <div class="flex justify-between">
+                                                                <span class="text-gray-600">Status:</span>
+                                                                <span class="font-medium text-red-700">Failed</span>
+                                                            </div>
+                                                        @endif
+                                                        @if($latestCancellation->handledBy)
+                                                            <div class="flex justify-between">
+                                                                <span class="text-gray-600">Processed By:</span>
+                                                                <span class="text-gray-900">{{ $latestCancellation->handledBy->name }}</span>
+                                                            </div>
+                                                        @endif
+                                                        @if($latestCancellation->updated_at)
+                                                            <div class="flex justify-between">
+                                                                <span class="text-gray-600">Processed Date:</span>
+                                                                <span class="text-gray-900">{{ $latestCancellation->updated_at->format('M d, Y h:i A') }}</span>
+                                                            </div>
+                                                        @endif
+                                                        @php
+                                                            // Extract transaction ID from notes if available
+                                                            $transactionId = null;
+                                                            if ($latestCancellation->notes) {
+                                                                if (preg_match('/Transaction ID:\s*([^\n]+)/i', $latestCancellation->notes, $matches)) {
+                                                                    $transactionId = trim($matches[1]);
+                                                                } elseif (preg_match('/Refund Processed:.*?Transaction ID:\s*([^\n]+)/i', $latestCancellation->notes, $matches)) {
+                                                                    $transactionId = trim($matches[1]);
+                                                                }
+                                                            }
+                                                        @endphp
+                                                        @if($transactionId)
+                                                            <div class="flex justify-between">
+                                                                <span class="text-gray-600">Transaction ID:</span>
+                                                                <span class="text-gray-900 font-mono text-xs">{{ $transactionId }}</span>
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    @elseif($latestReturn && in_array($latestReturn->status, [
+                                        \App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+                                        \App\Models\ReturnRequest::STATUS_COMPLETED,
+                                    ]))
+                                        <div class="p-3 mb-3 bg-purple-50 border border-purple-100 rounded-lg">
+                                            <p class="text-sm text-purple-700">✓ This order has been returned and processed.</p>
+                                        </div>
+                                    @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_VERIFIED)
+                                        <div class="p-3 mb-3 bg-green-50 border border-green-100 rounded-lg">
+                                            <p class="text-sm text-green-700">✓ Return has been verified. Refund is being processed.</p>
+                                        </div>
+                                    @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_IN_TRANSIT)
+                                        <div class="p-3 mb-3 bg-indigo-50 border border-indigo-100 rounded-lg">
+                                            <p class="text-sm text-indigo-700">🔄 Return is in transit. We'll verify once received.</p>
+                                        </div>
+                                    @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_APPROVED)
+                                        <div class="p-3 mb-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                            <p class="text-sm text-blue-700">✓ Return approved. Please submit your tracking number.</p>
+                                        </div>
+                                    @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_REQUESTED)
+                                        <div class="p-3 mb-3 bg-yellow-50 border border-yellow-100 rounded-lg">
+                                            <p class="text-sm text-yellow-700">⏳ Return request is pending review.</p>
+                                        </div>
+                                    @elseif($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED)
+                                        <div class="p-3 mb-3 bg-yellow-50 border border-yellow-100 rounded-lg">
+                                            <p class="text-sm text-yellow-700">⏳ Cancellation request is pending review.</p>
+                                        </div>
+                                    @elseif($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_APPROVED)
+                                        <div class="p-3 mb-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                            <p class="text-sm text-blue-700">✓ Cancellation approved. Processing refund.</p>
+                                        </div>
+                                    @elseif($isOrderCompleted)
                                         <div class="p-3 mb-3 bg-green-50 border border-green-100 rounded-lg">
                                             <p class="text-sm text-green-700">✓ These items have been delivered.</p>
                                         </div>
@@ -424,17 +748,97 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                             <!-- Back Order Items Section -->
                             @if($backOrderItems->isNotEmpty())
                                 @php
+                                    $isOrderCancelled = $order->status === 'cancelled';
                                     $isOrderCompleted = in_array($order->status, ['delivered', 'completed']);
                                     $isOrderShipped = in_array($order->status, ['shipped', 'delivered', 'completed']);
-                                    $backorderStatusLabel = $isOrderCompleted ? 'Delivered' : ($isOrderShipped ? 'Shipped' : ($order->status === 'ready_to_ship' ? 'Preparing to Ship' : 'Awaiting stock'));
-                                    $backorderStatusColor = $isOrderCompleted ? 'bg-green-100 text-green-800' : ($isOrderShipped ? 'bg-purple-100 text-purple-800' : ($order->status === 'ready_to_ship' ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800'));
+                                    $latestCancellation = $order->cancellationRequests->sortByDesc('created_at')->first();
+                                    $latestReturn = $order->returnRequests->sortByDesc('created_at')->first();
+                                    
+                                    // Determine status based on cancellation/return first
+                                    if ($isOrderCancelled) {
+                                        $backorderStatusLabel = 'Cancelled';
+                                        $backorderStatusColor = 'bg-red-100 text-red-800';
+                                    } elseif ($latestReturn && in_array($latestReturn->status, [
+                                        \App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+                                        \App\Models\ReturnRequest::STATUS_COMPLETED,
+                                    ])) {
+                                        $backorderStatusLabel = 'Returned';
+                                        $backorderStatusColor = 'bg-purple-100 text-purple-800';
+                                    } elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_VERIFIED) {
+                                        $backorderStatusLabel = 'Return Verified';
+                                        $backorderStatusColor = 'bg-green-100 text-green-800';
+                                    } elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_IN_TRANSIT) {
+                                        $backorderStatusLabel = 'Return In Transit';
+                                        $backorderStatusColor = 'bg-indigo-100 text-indigo-800';
+                                    } elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_APPROVED) {
+                                        $backorderStatusLabel = 'Return Approved';
+                                        $backorderStatusColor = 'bg-blue-100 text-blue-800';
+                                    } elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_REQUESTED) {
+                                        $backorderStatusLabel = 'Return Requested';
+                                        $backorderStatusColor = 'bg-yellow-100 text-yellow-800';
+                                    } elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED) {
+                                        $backorderStatusLabel = 'Cancelled - Refunded';
+                                        $backorderStatusColor = 'bg-green-100 text-green-800';
+                                    } elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING) {
+                                        $backorderStatusLabel = 'Refund Processing';
+                                        $backorderStatusColor = 'bg-indigo-100 text-indigo-800';
+                                    } elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_APPROVED) {
+                                        $backorderStatusLabel = 'Cancellation Approved';
+                                        $backorderStatusColor = 'bg-blue-100 text-blue-800';
+                                    } elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED) {
+                                        $backorderStatusLabel = 'Cancellation Requested';
+                                        $backorderStatusColor = 'bg-yellow-100 text-yellow-800';
+                                    } else {
+                                        $backorderStatusLabel = $isOrderCompleted ? 'Delivered' : ($isOrderShipped ? 'Shipped' : ($order->status === 'ready_to_ship' ? 'Preparing to Ship' : 'Awaiting stock'));
+                                        $backorderStatusColor = $isOrderCompleted ? 'bg-green-100 text-green-800' : ($isOrderShipped ? 'bg-purple-100 text-purple-800' : ($order->status === 'ready_to_ship' ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800'));
+                                    }
                                 @endphp
                                 <div class="mt-6">
                                     <div class="flex items-center gap-2 mb-3">
                                         <h3 class="font-medium text-gray-900">Back Order Items</h3>
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $backorderStatusColor }}">{{ $backorderStatusLabel }}</span>
                                     </div>
-                                    @if(!$isOrderShipped)
+                                    @if($isOrderCancelled)
+                                        <div class="p-3 mb-3 bg-red-50 border border-red-100 rounded-lg">
+                                            <p class="text-sm text-red-700">✗ This order has been cancelled.</p>
+                                            @if($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED)
+                                                <p class="text-sm text-green-700 mt-1">✓ Refund has been processed.</p>
+                                            @elseif($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING)
+                                                <p class="text-sm text-indigo-700 mt-1">⏳ Refund is being processed.</p>
+                                            @endif
+                                        </div>
+                                    @elseif($latestReturn && in_array($latestReturn->status, [
+                                        \App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+                                        \App\Models\ReturnRequest::STATUS_COMPLETED,
+                                    ]))
+                                        <div class="p-3 mb-3 bg-purple-50 border border-purple-100 rounded-lg">
+                                            <p class="text-sm text-purple-700">✓ This order has been returned and processed.</p>
+                                        </div>
+                                    @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_VERIFIED)
+                                        <div class="p-3 mb-3 bg-green-50 border border-green-100 rounded-lg">
+                                            <p class="text-sm text-green-700">✓ Return has been verified. Refund is being processed.</p>
+                                        </div>
+                                    @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_IN_TRANSIT)
+                                        <div class="p-3 mb-3 bg-indigo-50 border border-indigo-100 rounded-lg">
+                                            <p class="text-sm text-indigo-700">🔄 Return is in transit. We'll verify once received.</p>
+                                        </div>
+                                    @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_APPROVED)
+                                        <div class="p-3 mb-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                            <p class="text-sm text-blue-700">✓ Return approved. Please submit your tracking number.</p>
+                                        </div>
+                                    @elseif($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_REQUESTED)
+                                        <div class="p-3 mb-3 bg-yellow-50 border border-yellow-100 rounded-lg">
+                                            <p class="text-sm text-yellow-700">⏳ Return request is pending review.</p>
+                                        </div>
+                                    @elseif($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED)
+                                        <div class="p-3 mb-3 bg-yellow-50 border border-yellow-100 rounded-lg">
+                                            <p class="text-sm text-yellow-700">⏳ Cancellation request is pending review.</p>
+                                        </div>
+                                    @elseif($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_APPROVED)
+                                        <div class="p-3 mb-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                            <p class="text-sm text-blue-700">✓ Cancellation approved. Processing refund.</p>
+                                        </div>
+                                    @elseif(!$isOrderShipped)
                                         <div class="p-3 mb-3 bg-blue-50 border border-blue-100 rounded-lg">
                                             <p class="text-sm text-blue-700">These items will be shipped separately once they're back in stock.</p>
                                         </div>
@@ -557,20 +961,35 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 										$statusBadgeClass = 'bg-red-100 text-red-800';
 										$statusLabel = 'Payment Rejected';
 									} else {
-										$statusBadgeClass = match($paymentStatus) {
-											'paid' => 'bg-green-100 text-green-800',
-											'pending_verification' => 'bg-yellow-100 text-yellow-800',
-											'pending_cod' => 'bg-blue-100 text-blue-800',
-											'unpaid' => 'bg-red-100 text-red-800',
-											default => 'bg-gray-100 text-gray-800',
-										};
-										$statusLabel = match($paymentStatus) {
-											'paid' => 'Paid ✓',
-											'pending_verification' => 'Pending Verification',
-											'pending_cod' => 'Pending COD',
-											'unpaid' => 'Unpaid',
-											default => ucfirst(str_replace('_', ' ', $paymentStatus)),
-										};
+										// Check for refund status
+										$latestCancellation = $order->cancellationRequests->sortByDesc('created_at')->first();
+										$latestReturn = $order->returnRequests->sortByDesc('created_at')->first();
+										$isRefunded = ($order->payment_status === 'refunded') || 
+											($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED) ||
+											($latestReturn && in_array($latestReturn->status, [
+												\App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+												\App\Models\ReturnRequest::STATUS_COMPLETED,
+											]));
+										
+										if ($isRefunded) {
+											$statusBadgeClass = 'bg-purple-100 text-purple-800';
+											$statusLabel = 'Refunded';
+										} else {
+											$statusBadgeClass = match($paymentStatus) {
+												'paid' => 'bg-green-100 text-green-800',
+												'pending_verification' => 'bg-yellow-100 text-yellow-800',
+												'pending_cod' => 'bg-blue-100 text-blue-800',
+												'unpaid' => 'bg-red-100 text-red-800',
+												default => 'bg-gray-100 text-gray-800',
+											};
+											$statusLabel = match($paymentStatus) {
+												'paid' => 'Paid ✓',
+												'pending_verification' => 'Pending Verification',
+												'pending_cod' => 'Pending COD',
+												'unpaid' => 'Unpaid',
+												default => ucfirst(str_replace('_', ' ', $paymentStatus)),
+											};
+										}
 									}
 								@endphp
 								<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $statusBadgeClass }}">{{ $statusLabel }}</span>
@@ -636,8 +1055,118 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 								<span>Total:</span>
 								<span>₱{{ number_format($order->total_amount, 2) }}</span>
 							</div>
+							
+							@php
+								$hasRemainingBalance = ($order->remaining_balance ?? 0) > 0;
+								$requires50PercentUpfront = $order->order_type === 'backorder' || $order->order_type === 'custom' || ($order->order_type === 'mixed' && $hasRemainingBalance);
+							@endphp
+							@if($hasRemainingBalance && $requires50PercentUpfront)
+								<div class="pt-3 border-t mt-3 space-y-2">
+									<div class="flex justify-between items-center bg-blue-50 p-3 rounded border border-blue-200">
+										<div>
+											<span class="text-sm font-medium text-blue-900">Remaining Balance</span>
+											<p class="text-xs text-blue-700 italic mt-1">To be collected by courier</p>
+										</div>
+										<span class="text-sm font-semibold text-blue-900">₱{{ number_format($order->remaining_balance, 2) }}</span>
+									</div>
+								</div>
+							@endif
 						</div>
                     </div>
+
+					@php
+						$latestCancellation = $order->cancellationRequests->sortByDesc('created_at')->first();
+					@endphp
+					@if($latestCancellation && ($latestCancellation->refund_amount || $latestCancellation->refund_method || in_array($latestCancellation->status, [
+						\App\Models\CancellationRequest::STATUS_REFUND_COMPLETED,
+						\App\Models\CancellationRequest::STATUS_REFUND_PROCESSING,
+						\App\Models\CancellationRequest::STATUS_REFUND_FAILED,
+					])))
+						<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+							<h2 class="font-semibold text-gray-900 mb-3">Refund Information</h2>
+							<div class="space-y-3">
+								@if($latestCancellation->refund_amount)
+									<div class="flex justify-between items-center py-2 border-b border-gray-100">
+										<span class="text-sm text-gray-600">Refund Amount</span>
+										<span class="text-lg font-semibold text-gray-900">₱{{ number_format($latestCancellation->refund_amount, 2) }}</span>
+									</div>
+								@endif
+								
+								@if($latestCancellation->refund_method)
+									<div class="flex justify-between items-center py-2 border-b border-gray-100">
+										<span class="text-sm text-gray-600">Refund Method</span>
+										<span class="text-sm font-medium text-gray-900">{{ ucfirst(str_replace('_', ' ', $latestCancellation->refund_method)) }}</span>
+									</div>
+								@endif
+								
+								@if($latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED)
+									<div class="flex justify-between items-center py-2 border-b border-gray-100">
+										<span class="text-sm text-gray-600">Refund Status</span>
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Completed</span>
+									</div>
+								@elseif($latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING)
+									<div class="flex justify-between items-center py-2 border-b border-gray-100">
+										<span class="text-sm text-gray-600">Refund Status</span>
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">Processing</span>
+									</div>
+								@elseif($latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_FAILED)
+									<div class="flex justify-between items-center py-2 border-b border-gray-100">
+										<span class="text-sm text-gray-600">Refund Status</span>
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Failed</span>
+									</div>
+								@endif
+								
+								@php
+									// Extract transaction ID from notes if available
+									$transactionId = null;
+									if ($latestCancellation->notes) {
+										// Try multiple patterns to extract transaction ID
+										$patterns = [
+											'/Transaction ID:\s*([^\n\r]+)/i',
+											'/Refund Processed:.*?Transaction ID:\s*([^\n\r]+)/i',
+											'/Transaction ID[:\s]+([^\n\r]+)/i',
+											'/Transaction[:\s]+([A-Za-z0-9]+)/i',
+										];
+										foreach ($patterns as $pattern) {
+											if (preg_match($pattern, $latestCancellation->notes, $matches)) {
+												$transactionId = trim($matches[1]);
+												if ($transactionId && $transactionId !== 'N/A') {
+													break;
+												}
+											}
+										}
+									}
+								@endphp
+								@if($transactionId)
+									<div class="flex justify-between items-center py-2 border-b border-gray-100">
+										<span class="text-sm text-gray-600">Transaction ID</span>
+										<span class="text-sm font-mono text-gray-900">{{ $transactionId }}</span>
+									</div>
+								@endif
+								
+								@if($latestCancellation->handledBy)
+									<div class="flex justify-between items-center py-2 border-b border-gray-100">
+										<span class="text-sm text-gray-600">Processed By</span>
+										<span class="text-sm text-gray-900">{{ $latestCancellation->handledBy->name }}</span>
+									</div>
+								@endif
+								
+								@if($latestCancellation->updated_at)
+									<div class="flex justify-between items-center py-2">
+										<span class="text-sm text-gray-600">Processed Date</span>
+										<span class="text-sm text-gray-900">{{ $latestCancellation->updated_at->format('M d, Y h:i A') }}</span>
+									</div>
+								@endif
+								
+								@if($latestCancellation->notes && $transactionId === null)
+									<div class="mt-3 pt-3 border-t border-gray-200">
+										<p class="text-xs font-medium text-gray-600 mb-1">Notes</p>
+										<p class="text-xs text-gray-700 whitespace-pre-line">{{ $latestCancellation->notes }}</p>
+									</div>
+								@endif
+							</div>
+						</div>
+					@endif
 
 					<!-- Order Status Timeline -->
 					<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
@@ -695,6 +1224,9 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 							@endforeach
 						</div>
 					</div>
+
+					@include('partials.cancellation-request-form', ['order' => $order])
+					@include('partials.return-request-form', ['order' => $order])
 
 					<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
 						<a href="{{ route('customer.orders.index') }}" class="inline-flex items-center px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">Back to My Orders</a>

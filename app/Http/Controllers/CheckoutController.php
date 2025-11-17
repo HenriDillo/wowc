@@ -148,7 +148,32 @@ class CheckoutController extends Controller
             'payment_method' => 'required|in:GCash,Bank,Bank Transfer,COD',
 			'order_type' => 'nullable|in:standard,backorder',
         ]);
-
+        
+        $cart = Cart::where('status', 'active')
+            ->where(function ($q) use ($user) {
+                if ($user) {
+                    $q->where('user_id', $user->id);
+                } else {
+                    $q->whereNull('user_id')->where('session_id', session()->getId());
+                }
+            })->first();
+        
+        if ($cart) {
+            $cartItems = CartItem::with('item')->where('cart_id', $cart->id)->get();
+            $standardItems = $cartItems->filter(fn($ci) => !($ci->is_backorder ?? false) && !($ci->item->isBackorder() ?? false));
+            $backorderItems = $cartItems->filter(fn($ci) => ($ci->is_backorder ?? false) || ($ci->item->isBackorder() ?? false));
+            $isMixedOrder = $standardItems->isNotEmpty() && $backorderItems->isNotEmpty();
+            
+            // Check if this requires 50% upfront (Backorder, Custom Order, or Mixed Order with Standard + Backorder)
+            $requires50PercentUpfront = $backorderItems->isNotEmpty() || $isMixedOrder;
+            
+            // Reject COD for 50% upfront orders
+            if ($requires50PercentUpfront && $validated['payment_method'] === 'COD') {
+                return back()->withErrors(['payment_method' => 'COD is not available for Backorder, Custom Order, or Mixed Order (Standard + Backorder). Please use Bank Transfer or GCash.'])->withInput();
+            }
+        }
+        
+        // Get cart again for order creation (or use the one we already have)
         $cart = Cart::where('status', 'active')
             ->where(function ($q) use ($user) {
                 if ($user) {

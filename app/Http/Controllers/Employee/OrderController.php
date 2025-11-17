@@ -11,10 +11,10 @@ class OrderController extends Controller
 {
     public function index(Request $request)
 	{
-		$query = Order::query()
+        $query = Order::query()
 			->select('orders.*') // ensure unique orders across filters that may translate to joins/exists
 			->distinct()
-			->with(['user', 'items.item', 'childOrders'])
+			->with(['user', 'items.item', 'childOrders', 'cancellationRequests', 'returnRequests'])
 			->latest();
 
         // Filter by order type
@@ -86,6 +86,9 @@ class OrderController extends Controller
             'childOrders',
             'parentOrder',
             'payments.verifier',
+            'finalPaymentVerifier',
+            'cancellationRequests.handledBy',
+            'returnRequests',
         ])->findOrFail($id);
         // If the request expects JSON (modal usage), return JSON; otherwise render a full details page
         if (request()->expectsJson()) {
@@ -189,6 +192,12 @@ class OrderController extends Controller
             }
             // Allow all other status changes for COD orders (including processing, shipped, etc.)
         } else {
+            // For 50% upfront orders: Block completion until final payment is verified
+            if ($validated['status'] === 'completed' && $order->requiresFinalPaymentVerification()) {
+                if (!$order->hasFinalPaymentVerified()) {
+                    return back()->withErrors(['payment' => 'Final payment verification is required before the order can be marked as completed. Please verify the final payment collected by the courier first.']);
+                }
+            }
             // For non-COD orders, validate payment before processing
             $processingStatuses = ['processing', 'ready_to_ship', 'shipped', 'delivered', 'in_design', 'in_production', 'ready_for_delivery', 'completed'];
             if (in_array($validated['status'], $processingStatuses)) {
@@ -409,6 +418,76 @@ class OrderController extends Controller
             }
 
             return back()->withErrors(['payment' => 'Payment verification failed. Please try again.']);
+        }
+    }
+
+    /**
+     * Verify final payment for 50% upfront orders
+     */
+    public function verifyFinalPayment($id, Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->isEmployee()) {
+            abort(403, 'Only employees can verify final payments');
+        }
+
+        $order = Order::with(['childOrders', 'finalPaymentVerifier'])->findOrFail($id);
+
+        // Validate that this order requires final payment verification
+        if (!$order->requiresFinalPaymentVerification()) {
+            return back()->withErrors(['payment' => 'This order does not require final payment verification.']);
+        }
+
+        // Check if already verified
+        if ($order->hasFinalPaymentVerified()) {
+            return back()->withErrors(['payment' => 'Final payment has already been verified for this order.']);
+        }
+
+        // Check if there's a remaining balance to verify
+        if ($order->remaining_balance <= 0) {
+            return back()->withErrors(['payment' => 'No remaining balance to verify.']);
+        }
+
+        try {
+            \DB::transaction(function () use ($order, $user) {
+                // For mixed orders, verify all child orders that require it
+                if ($order->order_type === 'mixed' && $order->childOrders()->exists()) {
+                    foreach ($order->childOrders as $child) {
+                        if ($child->requiresFinalPaymentVerification() && !$child->final_payment_verified && $child->remaining_balance > 0) {
+                            $child->final_payment_verified = true;
+                            $child->final_payment_verified_at = now();
+                            $child->final_payment_verified_by = $user->id;
+                            $child->save();
+                        }
+                    }
+                } else {
+                    // Single order
+                    $order->final_payment_verified = true;
+                    $order->final_payment_verified_at = now();
+                    $order->final_payment_verified_by = $user->id;
+                    $order->save();
+                }
+            });
+
+            $message = 'Final payment verified successfully. Order can now be marked as completed.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => true, 'message' => $message]);
+            }
+
+            return back()->with('success', $message);
+        } catch (\Exception $e) {
+            \Log::error('Final payment verification failed', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Final payment verification failed: ' . $e->getMessage()], 500);
+            }
+
+            return back()->withErrors(['payment' => 'Final payment verification failed. Please try again.']);
         }
     }
 

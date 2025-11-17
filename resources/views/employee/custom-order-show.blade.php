@@ -83,7 +83,21 @@
 				@endif
 
 				<h1 class="text-2xl font-bold text-gray-900">Custom Order Review</h1>
-				<p class="text-sm text-gray-500 mt-1">Status: <span class="font-medium">{{ ucfirst(str_replace('_',' ', $customOrder->status)) }}</span></p>
+				@php
+					$isOrderCancelled = $customOrder->order->status === 'cancelled';
+					$latestReturn = $customOrder->order->returnRequests->sortByDesc('created_at')->first();
+					$isOrderReturned = $latestReturn && in_array($latestReturn->status, [
+						\App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+						\App\Models\ReturnRequest::STATUS_COMPLETED,
+					]);
+					$statusText = ucfirst(str_replace('_',' ', $customOrder->status));
+					if ($isOrderCancelled) {
+						$statusText .= ' (Cancelled)';
+					} elseif ($isOrderReturned) {
+						$statusText .= ' (Returned)';
+					}
+				@endphp
+				<p class="text-sm text-gray-500 mt-1">Status: <span class="font-medium">{{ $statusText }}</span></p>
 
 				<div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
 					<div class="md:col-span-2 space-y-6">
@@ -101,8 +115,28 @@
 								<div>
 									<dt class="text-gray-500">Status</dt>
 									<dd class="text-gray-900">
-										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-											{{ str_replace('_',' ', ucfirst($customOrder->status)) }}
+										@php
+											$statusColor = match($customOrder->status) {
+												'pending_review' => 'bg-yellow-100 text-yellow-800',
+												'approved' => 'bg-green-100 text-green-800',
+												'rejected' => 'bg-red-100 text-red-800',
+												'in_production' => 'bg-blue-100 text-blue-800',
+												'completed' => 'bg-gray-100 text-gray-800',
+												default => 'bg-gray-100 text-gray-800',
+											};
+											// Override color if order is cancelled or returned
+											if ($isOrderCancelled || $isOrderReturned) {
+												$statusColor = 'bg-red-100 text-red-800';
+											}
+											$statusLabel = str_replace('_',' ', ucfirst($customOrder->status));
+											if ($isOrderCancelled) {
+												$statusLabel .= ' (Cancelled)';
+											} elseif ($isOrderReturned) {
+												$statusLabel .= ' (Returned)';
+											}
+										@endphp
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $statusColor }}">
+											{{ $statusLabel }}
 										</span>
 									</dd>
 								</div>
