@@ -1,0 +1,188 @@
+<?php
+    $hasActiveReturn = $order->returnRequests
+        ->whereIn('status', [
+            \App\Models\ReturnRequest::STATUS_REQUESTED,
+            \App\Models\ReturnRequest::STATUS_APPROVED,
+            \App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+        ])
+        ->isNotEmpty();
+    
+    $canRequestReturn = in_array($order->status, ['delivered', 'completed']) && !$hasActiveReturn;
+?>
+
+<?php if($canRequestReturn): ?>
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mt-6">
+        <h2 class="font-semibold text-gray-900 mb-4">Request Return</h2>
+        <form action="<?php echo e(route('returns.request', $order->id)); ?>" method="POST" enctype="multipart/form-data" x-data="{ submitting: false }" @submit="submitting = true">
+            <?php echo csrf_field(); ?>
+            <div class="space-y-4">
+                <div>
+                    <label for="reason" class="block text-sm font-medium text-gray-700 mb-2">
+                        Reason for Return <span class="text-red-500">*</span>
+                    </label>
+                    <textarea 
+                        id="reason" 
+                        name="reason" 
+                        rows="4" 
+                        required
+                        minlength="10"
+                        maxlength="1000"
+                        class="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:border-[#c59d5f] focus:ring-2 focus:ring-[#c59d5f]/20 text-sm transition-all"
+                        placeholder="Please provide a detailed reason for your return request (minimum 10 characters)..."
+                    ><?php echo e(old('reason')); ?></textarea>
+                    <?php $__errorArgs = ['reason'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                        <p class="mt-1 text-sm text-red-600"><?php echo e($message); ?></p>
+                    <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                </div>
+
+                <div>
+                    <label for="proof_image" class="block text-sm font-medium text-gray-700 mb-2">
+                        Proof Image (Optional)
+                    </label>
+                    <input 
+                        type="file" 
+                        id="proof_image" 
+                        name="proof_image" 
+                        accept="image/jpeg,image/png,image/jpg"
+                        class="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:border-[#c59d5f] focus:ring-2 focus:ring-[#c59d5f]/20 text-sm transition-all"
+                    >
+                    <p class="mt-1 text-xs text-gray-500">Accepted formats: JPG, PNG, JPEG. Max size: 5MB</p>
+                    <?php $__errorArgs = ['proof_image'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                        <p class="mt-1 text-sm text-red-600"><?php echo e($message); ?></p>
+                    <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                </div>
+
+                <div>
+                    <button 
+                        type="submit" 
+                        :disabled="submitting"
+                        class="w-full px-4 py-2.5 rounded-lg text-white font-medium shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        style="background:#c59d5f;"
+                    >
+                        <span x-show="!submitting">Submit Return Request</span>
+                        <span x-show="submitting">Submitting...</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+<?php endif; ?>
+
+<?php if($hasActiveReturn): ?>
+    <?php
+        $activeReturn = $order->returnRequests
+            ->whereIn('status', [
+                \App\Models\ReturnRequest::STATUS_REQUESTED,
+                \App\Models\ReturnRequest::STATUS_APPROVED,
+                \App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+            ])
+            ->sortByDesc('created_at')
+            ->first();
+    ?>
+    
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mt-6">
+        <h2 class="font-semibold text-gray-900 mb-4">Return Request Status</h2>
+        <div class="space-y-4">
+            <?php
+                $statusColor = match($activeReturn->status) {
+                    \App\Models\ReturnRequest::STATUS_REQUESTED => 'bg-yellow-100 text-yellow-800',
+                    \App\Models\ReturnRequest::STATUS_APPROVED => 'bg-blue-100 text-blue-800',
+                    \App\Models\ReturnRequest::STATUS_IN_TRANSIT => 'bg-indigo-100 text-indigo-800',
+                    \App\Models\ReturnRequest::STATUS_VERIFIED => 'bg-green-100 text-green-800',
+                    \App\Models\ReturnRequest::STATUS_REJECTED => 'bg-red-100 text-red-800',
+                    default => 'bg-gray-100 text-gray-800',
+                };
+            ?>
+            
+            <div>
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium <?php echo e($statusColor); ?>">
+                    <?php echo e($activeReturn->getStatusLabel()); ?>
+
+                </span>
+            </div>
+
+            <div>
+                <div class="text-sm font-medium text-gray-700">Reason:</div>
+                <div class="mt-1 text-sm text-gray-900"><?php echo e($activeReturn->reason); ?></div>
+            </div>
+
+            <?php if($activeReturn->proof_image): ?>
+                <div>
+                    <div class="text-sm font-medium text-gray-700">Proof Image:</div>
+                    <img src="<?php echo e(Storage::url($activeReturn->proof_image)); ?>" alt="Return Proof" class="mt-2 max-w-xs rounded-lg border border-gray-200">
+                </div>
+            <?php endif; ?>
+
+            <?php if($activeReturn->status === \App\Models\ReturnRequest::STATUS_APPROVED && !$activeReturn->return_tracking_number): ?>
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 class="font-medium text-blue-900 mb-2">Submit Return Tracking Number</h3>
+                    <form action="<?php echo e(route('returns.tracking', $activeReturn->id)); ?>" method="POST" x-data="{ submitting: false }" @submit="submitting = true">
+                        <?php echo csrf_field(); ?>
+                        <div class="space-y-3">
+                            <input 
+                                type="text" 
+                                name="return_tracking_number" 
+                                required
+                                maxlength="100"
+                                placeholder="Enter LBC tracking number"
+                                class="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:border-[#c59d5f] focus:ring-2 focus:ring-[#c59d5f]/20 text-sm transition-all"
+                            >
+                            <button 
+                                type="submit" 
+                                :disabled="submitting"
+                                class="w-full px-4 py-2.5 rounded-lg text-white font-medium shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                style="background:#c59d5f;"
+                            >
+                                <span x-show="!submitting">Submit Tracking Number</span>
+                                <span x-show="submitting">Submitting...</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            <?php endif; ?>
+
+            <?php if($activeReturn->return_tracking_number): ?>
+                <div>
+                    <div class="text-sm font-medium text-gray-700">Return Tracking Number:</div>
+                    <div class="mt-1 text-sm text-gray-900 font-mono"><?php echo e($activeReturn->return_tracking_number); ?></div>
+                </div>
+            <?php endif; ?>
+
+            <?php if($activeReturn->refund_amount): ?>
+                <div>
+                    <div class="text-sm font-medium text-gray-700">Refund Amount:</div>
+                    <div class="mt-1 text-sm text-gray-900 font-semibold">₱<?php echo e(number_format($activeReturn->refund_amount, 2)); ?></div>
+                    <?php if($activeReturn->refund_method): ?>
+                        <div class="mt-1 text-xs text-gray-500">Method: <?php echo e(ucfirst($activeReturn->refund_method)); ?></div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if($activeReturn->replacementOrder): ?>
+                <div>
+                    <div class="text-sm font-medium text-gray-700">Replacement Order:</div>
+                    <a href="<?php echo e(route('customer.orders.show', $activeReturn->replacementOrder->id)); ?>" class="mt-1 text-sm text-[#c59d5f] hover:underline">
+                        View Order #<?php echo e($activeReturn->replacementOrder->id); ?>
+
+                    </a>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
+<?php /**PATH C:\xampp\htdocs\wowc\resources\views/partials/return-request-form.blade.php ENDPATH**/ ?>

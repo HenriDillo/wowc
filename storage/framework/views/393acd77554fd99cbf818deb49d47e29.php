@@ -45,7 +45,21 @@
                                 <?php endif; ?>
                                 <div>
                                     <div class="font-medium text-gray-900"><?php echo e($co->custom_name); ?></div>
-                                    <div class="text-xs text-gray-500">Qty: <?php echo e($co->quantity); ?> • Status: <?php echo e(ucfirst(str_replace('_', ' ', $co->status))); ?></div>
+                                    <?php
+                                        $isOrderCancelled = $co->order->status === 'cancelled';
+                                        $latestReturn = $co->order->returnRequests->sortByDesc('created_at')->first();
+                                        $isOrderReturned = $latestReturn && in_array($latestReturn->status, [
+                                            \App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+                                            \App\Models\ReturnRequest::STATUS_COMPLETED,
+                                        ]);
+                                        $statusText = ucfirst(str_replace('_', ' ', $co->status));
+                                        if ($isOrderCancelled) {
+                                            $statusText .= ' (Cancelled)';
+                                        } elseif ($isOrderReturned) {
+                                            $statusText .= ' (Returned)';
+                                        }
+                                    ?>
+                                    <div class="text-xs text-gray-500">Qty: <?php echo e($co->quantity); ?> • Status: <?php echo e($statusText); ?></div>
                                     <?php if($co->price_estimate): ?>
                                         <div class="text-xs text-yellow-700">Estimated Price: ₱<?php echo e(number_format($co->price_estimate, 2)); ?></div>
                                     <?php endif; ?>
@@ -108,6 +122,39 @@
 					default => 'bg-gray-100 text-gray-800',
 				};
 			};
+			
+			$getDisplayStatus = function($order) use ($getStatusColor) {
+				$latestCancellation = $order->cancellationRequests->sortByDesc('created_at')->first();
+				$latestReturn = $order->returnRequests->sortByDesc('created_at')->first();
+				
+				// Priority: Cancelled > Return > Cancellation Request > Return Request > Order Status
+				if ($order->status === 'cancelled') {
+					return ['label' => 'Cancelled', 'color' => 'bg-red-100 text-red-800'];
+				} elseif ($latestReturn && in_array($latestReturn->status, [
+					\App\Models\ReturnRequest::STATUS_REFUND_COMPLETED,
+					\App\Models\ReturnRequest::STATUS_COMPLETED,
+				])) {
+					return ['label' => 'Returned', 'color' => 'bg-purple-100 text-purple-800'];
+				} elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_VERIFIED) {
+					return ['label' => 'Return Verified', 'color' => 'bg-green-100 text-green-800'];
+				} elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_IN_TRANSIT) {
+					return ['label' => 'Return In Transit', 'color' => 'bg-indigo-100 text-indigo-800'];
+				} elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_APPROVED) {
+					return ['label' => 'Return Approved', 'color' => 'bg-blue-100 text-blue-800'];
+				} elseif ($latestReturn && $latestReturn->status === \App\Models\ReturnRequest::STATUS_REQUESTED) {
+					return ['label' => 'Return Requested', 'color' => 'bg-yellow-100 text-yellow-800'];
+				} elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_COMPLETED) {
+					return ['label' => 'Cancelled - Refunded', 'color' => 'bg-green-100 text-green-800'];
+				} elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REFUND_PROCESSING) {
+					return ['label' => 'Refund Processing', 'color' => 'bg-indigo-100 text-indigo-800'];
+				} elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_APPROVED) {
+					return ['label' => 'Cancellation Approved', 'color' => 'bg-blue-100 text-blue-800'];
+				} elseif ($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED) {
+					return ['label' => 'Cancellation Requested', 'color' => 'bg-yellow-100 text-yellow-800'];
+				} else {
+					return ['label' => ucfirst($order->status), 'color' => $getStatusColor($order->status)];
+				}
+			};
 		?>
 
 		<!-- Mixed Orders (Parent Orders) Section -->
@@ -137,10 +184,25 @@
 									</div>
 								</div>
 								<div class="flex flex-col items-end gap-2">
-									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?php echo e($getStatusColor($parentOrder->status)); ?>">
-										<?php echo e(ucfirst($parentOrder->status)); ?>
+									<?php $displayStatus = $getDisplayStatus($parentOrder); ?>
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?php echo e($displayStatus['color']); ?>">
+										<?php echo e($displayStatus['label']); ?>
 
 									</span>
+									<?php
+										$latestCancellation = $parentOrder->cancellationRequests->sortByDesc('created_at')->first();
+										$latestReturn = $parentOrder->returnRequests->sortByDesc('created_at')->first();
+									?>
+									<?php if($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED): ?>
+										<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">⚠️ Cancel Pending</span>
+									<?php endif; ?>
+									<?php if($latestReturn && in_array($latestReturn->status, [
+										\App\Models\ReturnRequest::STATUS_REQUESTED,
+										\App\Models\ReturnRequest::STATUS_APPROVED,
+										\App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+									])): ?>
+										<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">🔄 Return</span>
+									<?php endif; ?>
 									<a href="<?php echo e(route('customer.orders.show', $parentOrder->id)); ?>" class="text-xs text-purple-700 hover:underline">View Details</a>
 								</div>
 							</div>
@@ -192,11 +254,30 @@
 								<div>
 									<?php $firstName = optional(optional($o->items)->first()?->item)->name; ?>
 									<div class="font-medium text-gray-900"><?php echo e($firstName ?? ('Order #'.$o->id)); ?></div>
-									<div class="text-xs text-gray-500">Placed: <?php echo e($o->created_at?->format('M d, Y')); ?> • Status: <?php echo e(ucfirst($o->status)); ?></div>
+									<?php $displayStatus = $getDisplayStatus($o); ?>
+									<div class="text-xs text-gray-500">Placed: <?php echo e($o->created_at?->format('M d, Y')); ?> • Status: <?php echo e($displayStatus['label']); ?></div>
 								</div>
 							</div>
 							<div class="flex flex-col items-end gap-2">
 								<div class="text-sm text-gray-700">Order #<?php echo e($o->id); ?></div>
+								<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?php echo e($displayStatus['color']); ?>">
+									<?php echo e($displayStatus['label']); ?>
+
+								</span>
+								<?php
+									$latestCancellation = $o->cancellationRequests->sortByDesc('created_at')->first();
+									$latestReturn = $o->returnRequests->sortByDesc('created_at')->first();
+								?>
+								<?php if($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED): ?>
+									<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">⚠️ Cancel Pending</span>
+								<?php endif; ?>
+								<?php if($latestReturn && in_array($latestReturn->status, [
+									\App\Models\ReturnRequest::STATUS_REQUESTED,
+									\App\Models\ReturnRequest::STATUS_APPROVED,
+									\App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+								])): ?>
+									<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">🔄 Return</span>
+								<?php endif; ?>
 								<a href="<?php echo e(route('customer.orders.show', $o->id)); ?>" class="text-xs text-yellow-700 hover:underline">View Details</a>
 							</div>
 						</div>
@@ -225,7 +306,8 @@
 								<div>
 									<?php $firstName = optional(optional($o->items)->first()?->item)->name; ?>
 									<div class="font-medium text-gray-900"><?php echo e($firstName ?? ('Order #'.$o->id)); ?></div>
-									<div class="text-xs text-gray-500">Placed: <?php echo e($o->created_at?->format('M d, Y')); ?> • Status: <?php echo e(ucfirst($o->status)); ?></div>
+									<?php $displayStatus = $getDisplayStatus($o); ?>
+									<div class="text-xs text-gray-500">Placed: <?php echo e($o->created_at?->format('M d, Y')); ?> • Status: <?php echo e($displayStatus['label']); ?></div>
 									<?php if($o->expected_restock_date): ?>
 										<div class="text-xs text-blue-700">Expected: <?php echo e($o->expected_restock_date->format('M d, Y')); ?></div>
 									<?php endif; ?>
@@ -233,6 +315,24 @@
 							</div>
 							<div class="flex flex-col items-end gap-2">
 								<div class="text-sm text-gray-700">Order #<?php echo e($o->id); ?></div>
+								<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?php echo e($displayStatus['color']); ?>">
+									<?php echo e($displayStatus['label']); ?>
+
+								</span>
+								<?php
+									$latestCancellation = $o->cancellationRequests->sortByDesc('created_at')->first();
+									$latestReturn = $o->returnRequests->sortByDesc('created_at')->first();
+								?>
+								<?php if($latestCancellation && $latestCancellation->status === \App\Models\CancellationRequest::STATUS_REQUESTED): ?>
+									<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">⚠️ Cancel Pending</span>
+								<?php endif; ?>
+								<?php if($latestReturn && in_array($latestReturn->status, [
+									\App\Models\ReturnRequest::STATUS_REQUESTED,
+									\App\Models\ReturnRequest::STATUS_APPROVED,
+									\App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+								])): ?>
+									<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">🔄 Return</span>
+								<?php endif; ?>
 								<a href="<?php echo e(route('customer.orders.show', $o->id)); ?>" class="text-xs text-yellow-700 hover:underline">View Details</a>
 							</div>
 						</div>

@@ -16,7 +16,7 @@
         <div class="mt-6 space-y-4">
             <!-- Filter Tabs -->
             <div class="flex items-center gap-2 overflow-x-auto pb-2">
-                <?php $type = $activeType; ?>
+                <?php $type = $activeType ?? ''; ?>
                 <?php $tabs = [
                     '' => 'All Orders',
                     'standard' => 'Standard Orders',
@@ -28,6 +28,9 @@
                 <?php $__currentLoopData = $tabs; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $t => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                     <a href="<?php echo e(url('/employee/orders'.($t ? ('?type='.$t) : ''))); ?>" class="px-4 py-2 rounded-lg border text-sm whitespace-nowrap font-medium transition-all <?php echo e(($type === $t) ? 'bg-[#c49b6e] text-white border-[#c49b6e] shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'); ?>"><?php echo e($label); ?></a>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                <a href="<?php echo e(route('employee.returns.index')); ?>" class="px-4 py-2 rounded-lg border text-sm whitespace-nowrap font-medium transition-all <?php echo e(request()->routeIs('employee.returns.index') || request()->routeIs('employee.cancellations.index') ? 'bg-[#c49b6e] text-white border-[#c49b6e] shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'); ?>">
+                    Requests
+                </a>
             </div>
 
             <!-- Search and Filters Section -->
@@ -130,8 +133,32 @@
                     <!-- Order Row -->
                     <div class="grid grid-cols-12 items-center px-4 py-4 border-b text-sm hover:bg-gray-50/50 <?php echo e($o->order_type === 'mixed' ? 'bg-purple-50' : ''); ?>">
                         <div class="col-span-12 md:col-span-2">
-                            <?php echo e($o->order_type === 'mixed' ? '📦' : ''); ?> #<?php echo e($o->id); ?>
+                            <div class="flex items-center gap-2">
+                                <?php echo e($o->order_type === 'mixed' ? '📦' : ''); ?> #<?php echo e($o->id); ?>
 
+                                <?php
+                                    $hasPendingCancellation = $o->cancellationRequests
+                                        ->where('status', \App\Models\CancellationRequest::STATUS_REQUESTED)
+                                        ->isNotEmpty();
+                                    $hasActiveReturn = $o->returnRequests
+                                        ->whereIn('status', [
+                                            \App\Models\ReturnRequest::STATUS_REQUESTED,
+                                            \App\Models\ReturnRequest::STATUS_APPROVED,
+                                            \App\Models\ReturnRequest::STATUS_IN_TRANSIT,
+                                        ])
+                                        ->isNotEmpty();
+                                ?>
+                                <?php if($hasPendingCancellation): ?>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800" title="Pending Cancellation Request">
+                                        ⚠️ Cancel
+                                    </span>
+                                <?php endif; ?>
+                                <?php if($hasActiveReturn): ?>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800" title="Active Return Request">
+                                        🔄 Return
+                                    </span>
+                                <?php endif; ?>
+                            </div>
                             <?php if($o->order_type === 'mixed' && $o->childOrders->isNotEmpty()): ?>
                                 <div class="text-xs text-purple-700 mt-1"><?php echo e($o->childOrders->count()); ?> sub-orders</div>
                             <?php endif; ?>

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\CustomOrder;
 use App\Models\Payment;
+use App\Models\CancellationRequest;
 
 class Order extends Model
 {
@@ -32,6 +33,9 @@ class Order extends Model
         'recipient_phone',
         'shipping_fee',
         'cod_fee',
+        'final_payment_verified',
+        'final_payment_verified_at',
+        'final_payment_verified_by',
     ];
 
     protected $casts = [
@@ -42,6 +46,8 @@ class Order extends Model
         'cod_fee' => 'decimal:2',
         'expected_restock_date' => 'date',
         'delivered_at' => 'datetime',
+        'final_payment_verified' => 'boolean',
+        'final_payment_verified_at' => 'datetime',
     ];
 
     const STATUS_PENDING = 'pending';
@@ -114,6 +120,39 @@ class Order extends Model
 	{
 		return $this->hasMany(Payment::class);
 	}
+
+    public function finalPaymentVerifier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'final_payment_verified_by');
+    }
+
+    public function returnRequests(): HasMany
+    {
+        return $this->hasMany(ReturnRequest::class);
+    }
+
+    public function cancellationRequests(): HasMany
+    {
+        return $this->hasMany(CancellationRequest::class);
+    }
+
+    /**
+     * Get the latest cancellation request for this order
+     */
+    public function getLatestCancellationRequest(): ?CancellationRequest
+    {
+        return $this->cancellationRequests()->latest()->first();
+    }
+
+    /**
+     * Check if order has a pending cancellation request
+     */
+    public function hasPendingCancellationRequest(): bool
+    {
+        return $this->cancellationRequests()
+            ->where('status', CancellationRequest::STATUS_REQUESTED)
+            ->exists();
+    }
 
 	/**
 	 * Determine the payment percentage required based on order type
@@ -329,6 +368,159 @@ class Order extends Model
 
 		// Check if the new status is in the valid next statuses
 		return in_array($newStatus, $this->getValidNextStatuses());
+	}
+
+	/**
+	 * Check if this order requires final payment verification (50% upfront orders)
+	 */
+	public function requiresFinalPaymentVerification(): bool
+	{
+		return $this->order_type === self::TYPE_BACKORDER 
+			|| $this->order_type === self::TYPE_CUSTOM 
+			|| ($this->order_type === self::TYPE_MIXED && $this->remaining_balance > 0);
+	}
+
+	/**
+	 * Check if final payment has been verified
+	 */
+	public function hasFinalPaymentVerified(): bool
+	{
+		if (!$this->requiresFinalPaymentVerification()) {
+			return true; // No verification needed for orders that don't require it
+		}
+
+		// For mixed orders, check all child orders
+		if ($this->order_type === self::TYPE_MIXED && $this->childOrders()->exists()) {
+			foreach ($this->childOrders as $child) {
+				if ($child->requiresFinalPaymentVerification() && !$child->final_payment_verified) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		return (bool) $this->final_payment_verified;
+	}
+
+	/**
+	 * Check if order can be cancelled based on business rules
+	 */
+	public function canBeCancelled(): bool
+	{
+		// Already cancelled
+		if ($this->status === self::STATUS_CANCELLED) {
+			return false;
+		}
+
+		// Already completed
+		if ($this->status === self::STATUS_COMPLETED) {
+			return false;
+		}
+
+		// Check order type and status
+		switch ($this->order_type) {
+			case self::TYPE_STANDARD:
+				// Standard orders: can cancel if pending payment, pending verification, or processing (not yet shipped)
+				$allowedStatuses = [self::STATUS_PENDING, 'pending_verification', self::STATUS_PROCESSING];
+				if (in_array($this->status, $allowedStatuses)) {
+					return true;
+				}
+				// If shipped, cannot cancel (should use return process)
+				if (in_array($this->status, ['shipped', 'delivered'])) {
+					return false;
+				}
+				// If ready_to_ship but not yet shipped, check if it's actually packed
+				if ($this->status === 'ready_to_ship') {
+					// Allow cancellation if not yet shipped (no tracking number or not marked as shipped)
+					return empty($this->tracking_number);
+				}
+				return false;
+
+			case self::TYPE_BACKORDER:
+			case self::TYPE_CUSTOM:
+				// Backorder/Custom (50% DP): can cancel only if procurement/production has not started
+				// For backorders: check if any items are in_progress or fulfilled
+				if ($this->order_type === self::TYPE_BACKORDER) {
+					$hasStartedProcurement = $this->items()
+						->where('is_backorder', true)
+						->whereIn('backorder_status', [\App\Models\OrderItem::BO_IN_PROGRESS, \App\Models\OrderItem::BO_FULFILLED])
+						->exists();
+					if ($hasStartedProcurement) {
+						return false;
+					}
+				}
+				// For custom orders: check if production has started
+				if ($this->order_type === self::TYPE_CUSTOM) {
+					$customOrder = $this->customOrders()->first();
+					if ($customOrder && in_array($customOrder->status, [CustomOrder::STATUS_IN_PRODUCTION, CustomOrder::STATUS_COMPLETED])) {
+						return false;
+					}
+				}
+				// Can cancel if status is pending or processing (before production/procurement starts)
+				$allowedStatuses = [self::STATUS_PENDING, 'pending_verification', self::STATUS_PROCESSING];
+				if (in_array($this->status, $allowedStatuses)) {
+					return true;
+				}
+				// If in design (custom) or in_progress (backorder), check if production/procurement actually started
+				if ($this->status === 'in_design' && $this->order_type === self::TYPE_CUSTOM) {
+					// Still in design phase, can cancel
+					return true;
+				}
+				// If shipped, cannot cancel
+				if (in_array($this->status, ['shipped', 'delivered'])) {
+					return false;
+				}
+				return false;
+
+			case self::TYPE_MIXED:
+				// Mixed orders: can cancel individual items if they haven't been processed
+				// For the order itself, check if any items can be cancelled
+				// This is handled at item level, but we allow cancellation if order is still in early stages
+				$allowedStatuses = [self::STATUS_PENDING, 'pending_verification', self::STATUS_PROCESSING];
+				if (in_array($this->status, $allowedStatuses)) {
+					return true;
+				}
+				// If shipped, cannot cancel entire order
+				if (in_array($this->status, ['shipped', 'delivered'])) {
+					return false;
+				}
+				return false;
+
+			default:
+				return false;
+		}
+	}
+
+	/**
+	 * Get cancellation reason message based on order state
+	 */
+	public function getCancellationDenialReason(): ?string
+	{
+		if ($this->status === self::STATUS_CANCELLED) {
+			return 'Order is already cancelled.';
+		}
+		if ($this->status === self::STATUS_COMPLETED) {
+			return 'Order is already completed.';
+		}
+		if (in_array($this->status, ['shipped', 'delivered'])) {
+			return 'Order has already been shipped. Please use the Return Process instead.';
+		}
+		if ($this->order_type === self::TYPE_BACKORDER) {
+			$hasStartedProcurement = $this->items()
+				->where('is_backorder', true)
+				->whereIn('backorder_status', [\App\Models\OrderItem::BO_IN_PROGRESS, \App\Models\OrderItem::BO_FULFILLED])
+				->exists();
+			if ($hasStartedProcurement) {
+				return 'Procurement has already started for this backorder. Cancellation is not allowed.';
+			}
+		}
+		if ($this->order_type === self::TYPE_CUSTOM) {
+			$customOrder = $this->customOrders()->first();
+			if ($customOrder && in_array($customOrder->status, [CustomOrder::STATUS_IN_PRODUCTION, CustomOrder::STATUS_COMPLETED])) {
+				return 'Production has already started for this custom order. Cancellation is not allowed.';
+			}
+		}
+		return null;
 	}
 }
 

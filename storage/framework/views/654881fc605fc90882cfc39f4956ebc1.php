@@ -147,15 +147,30 @@ unset($__errorArgs, $__bag); ?>
                             $isPartialPayment = $paymentPercentage < 1.0;
                             $orderType = isset($payOrder) && $payOrder ? ($payOrder->order_type ?? 'custom') : 'standard';
                             $isBackOrderOrCustom = $orderType === 'backorder' || $orderType === 'custom';
+                            // Check if this is a mixed order (Standard + Backorder only)
+                            $isMixedOrder = isset($isMixedOrder) && $isMixedOrder;
+                            $standardItems = $standardItems ?? collect();
+                            $backorderItems = $backorderItems ?? collect();
+                            $isMixedStandardBackorder = $isMixedOrder && $standardItems->isNotEmpty() && $backorderItems->isNotEmpty();
+                            // Orders that require 50% upfront: Backorder, Custom Order, Mixed Order (Standard + Backorder only)
+                            $requires50PercentUpfront = $isBackOrderOrCustom || $isMixedStandardBackorder;
                         ?>
                         
-                        <?php if($isBackOrderOrCustom): ?>
+                        <?php if($requires50PercentUpfront): ?>
                             <div class="mt-3 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg mb-4">
                                 <div class="flex items-start gap-3">
                                     <span class="text-2xl">💰</span>
                                     <div>
                                         <p class="font-bold text-amber-900">Down Payment Required (50%)</p>
-                                        <p class="text-sm text-amber-800 mt-1">This is a <?php echo e($orderType === 'backorder' ? 'Back Order' : 'Custom Order'); ?>. You must pay <strong>50% upfront</strong> now to proceed. The remaining 50% will be due when the order is ready.</p>
+                                        <p class="text-sm text-amber-800 mt-1">
+                                            <?php if($isMixedStandardBackorder): ?>
+                                                This is a Mixed Order (Standard + Backorder). You must pay <strong>50% upfront</strong> now to proceed. The remaining 50% will be collected by the LBC courier upon delivery.
+                                            <?php elseif($orderType === 'backorder'): ?>
+                                                This is a Back Order. You must pay <strong>50% upfront</strong> now to proceed. The remaining 50% will be collected by the LBC courier upon delivery.
+                                            <?php else: ?>
+                                                This is a Custom Order. You must pay <strong>50% upfront</strong> now to proceed. The remaining 50% will be collected by the LBC courier upon delivery.
+                                            <?php endif; ?>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -165,7 +180,7 @@ unset($__errorArgs, $__bag); ?>
                             </div>
                         <?php endif; ?>
                         
-                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-<?php echo e($requires50PercentUpfront ? '2' : '3'); ?> gap-3">
 							<label class="flex items-center justify-center gap-2 border-2 rounded-md p-4 cursor-pointer transition-all duration-200" 
 								:class="method === 'Bank' ? 'border-[#c59d5f] bg-[#c59d5f]/5 shadow-sm' : 'border-gray-300 hover:border-gray-400'"
 								@click="method = 'Bank'; paymentMethodError = false; showShippingDetails = false">
@@ -185,6 +200,7 @@ unset($__errorArgs, $__bag); ?>
 								<img src="/images/gcash.png" alt="GCash" class="h-5">
 								<span class="text-sm font-medium" :class="method === 'GCash' ? 'text-[#c59d5f]' : 'text-gray-700'">GCash</span>
 							</label>
+							<?php if(!$requires50PercentUpfront): ?>
 							<label class="flex items-center justify-center gap-2 border-2 rounded-md p-4 cursor-pointer transition-all duration-200" 
 								:class="method === 'COD' ? 'border-[#c59d5f] bg-[#c59d5f]/5 shadow-sm' : 'border-gray-300 hover:border-gray-400'"
 								@click="method = 'COD'; paymentMethodError = false; showShippingDetails = true">
@@ -194,6 +210,7 @@ unset($__errorArgs, $__bag); ?>
 								</svg>
 								<span class="text-sm font-medium" :class="method === 'COD' ? 'text-[#c59d5f]' : 'text-gray-700'">COD</span>
 							</label>
+							<?php endif; ?>
 						</div>
 						
 						<!-- COD Shipping Details -->
@@ -201,6 +218,14 @@ unset($__errorArgs, $__bag); ?>
 							<p class="text-sm text-blue-800 font-medium mb-2">📦 Pay LBC upon delivery. Shipping fees follow LBC standards.</p>
 							<p class="text-xs text-blue-700">Your shipping information will be used as the recipient details for COD delivery.</p>
 						</div>
+						
+						<!-- Remaining Balance Notice for 50% Upfront Orders -->
+						<?php if($requires50PercentUpfront): ?>
+						<div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+							<p class="text-sm text-blue-800 font-medium mb-1">📦 Remaining Balance Collection</p>
+							<p class="text-xs text-blue-700">Remaining balance will be collected by the LBC courier upon delivery.</p>
+						</div>
+						<?php endif; ?>
 						<?php $__errorArgs = ['payment_method'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
@@ -469,7 +494,13 @@ unset($__errorArgs, $__bag); ?>
                                     <span class="font-bold text-amber-900">💰 Total Due Now</span>
                                     <span class="font-bold text-lg text-amber-900">₱<?php echo e(number_format($requiredPaymentAmount, 2)); ?></span>
                                 </div>
-                                <p class="text-xs text-gray-600 italic">Remaining: ₱<?php echo e(number_format($backorderSubtotal * 0.5, 2)); ?> (due when back order items arrive)</p>
+                                <div class="mt-2 p-3 bg-blue-50 rounded border border-blue-200">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span class="text-sm font-medium text-blue-900">Remaining Balance</span>
+                                        <span class="text-sm font-semibold text-blue-900">₱<?php echo e(number_format($backorderSubtotal * 0.5, 2)); ?></span>
+                                    </div>
+                                    <p class="text-xs text-blue-700 italic">To be collected by courier</p>
+                                </div>
                             </div>
                         <?php elseif(($cartItems->contains(fn($ci) => ($ci->is_backorder ?? false)) && !$paymentOnly) || ($paymentOnly && ($payOrder->order_type === 'backorder' || $payOrder->order_type === 'custom'))): ?>
                             <div class="mt-3 space-y-2 border-t pt-3">
@@ -498,7 +529,13 @@ unset($__errorArgs, $__bag); ?>
                                             <span class="font-bold text-amber-900">💰 Total Due Now</span>
                                             <span class="font-bold text-lg text-amber-900">₱<?php echo e(number_format($requiredPaymentAmount, 2)); ?></span>
                                         </div>
-                                        <p class="text-xs text-gray-600 italic">Remaining 50% (₱<?php echo e(number_format($total - $requiredPaymentAmount, 2)); ?>) will be due when the order is completed</p>
+                                        <div class="mt-2 p-3 bg-blue-50 rounded border border-blue-200">
+                                            <div class="flex items-center justify-between mb-1">
+                                                <span class="text-sm font-medium text-blue-900">Remaining Balance</span>
+                                                <span class="text-sm font-semibold text-blue-900">₱<?php echo e(number_format($total - $requiredPaymentAmount, 2)); ?></span>
+                                            </div>
+                                            <p class="text-xs text-blue-700 italic">To be collected by courier</p>
+                                        </div>
                                     </div>
                                 <?php else: ?>
                                     <!-- Back Order Payment Breakdown -->
@@ -506,7 +543,13 @@ unset($__errorArgs, $__bag); ?>
                                         <span class="font-bold text-amber-900">💰 Down Payment Due Now</span>
                                         <span class="font-bold text-lg text-amber-900">₱<?php echo e(number_format($displayAmount, 2)); ?></span>
                                     </div>
-                                    <p class="text-xs text-gray-600 italic">Remaining 50% (₱<?php echo e(number_format(($total - $displayAmount), 2)); ?>) will be due upon completion/arrival</p>
+                                    <div class="mt-2 p-3 bg-blue-50 rounded border border-blue-200">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-sm font-medium text-blue-900">Remaining Balance</span>
+                                            <span class="text-sm font-semibold text-blue-900">₱<?php echo e(number_format(($total - $displayAmount), 2)); ?></span>
+                                        </div>
+                                        <p class="text-xs text-blue-700 italic">To be collected by courier</p>
+                                    </div>
                                 <?php endif; ?>
                             </div>
                         <?php else: ?>
