@@ -105,6 +105,9 @@
                             $isMixedStandardBackorder = $isMixedOrder && $standardItems->isNotEmpty() && $backorderItems->isNotEmpty();
                             // Orders that require 50% upfront: Backorder, Custom Order, Mixed Order (Standard + Backorder only)
                             $requires50PercentUpfront = $isBackOrderOrCustom || $isMixedStandardBackorder;
+                            // For backorder checkouts (including backorder part of mixed orders), COD is not allowed
+                            $hasBackorderItems = $backorderItems->isNotEmpty() || ($isMixedOrder && $backorderItems->isNotEmpty()) || ($orderType === 'backorder');
+                            $isBackorderCheckout = $hasBackorderItems || $orderType === 'backorder';
                         @endphp
                         
                         @if($requires50PercentUpfront)
@@ -131,7 +134,13 @@
                             </div>
                         @endif
                         
-                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-{{ $requires50PercentUpfront ? '2' : '3' }} gap-3">
+                        @if($isBackorderCheckout)
+                            <div class="mt-3 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg mb-4">
+                                <p class="text-sm text-amber-800 font-medium">⚠️ Payment Method Restriction</p>
+                                <p class="text-xs text-amber-700 mt-1">For Backorder checkouts, only Bank Transfer and GCash are available. COD is not available for backorders.</p>
+                            </div>
+                        @endif
+                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-{{ ($requires50PercentUpfront || $isBackorderCheckout) ? '2' : '3' }} gap-3">
 							<label class="flex items-center justify-center gap-2 border-2 rounded-md p-4 cursor-pointer transition-all duration-200" 
 								:class="method === 'Bank' ? 'border-[#c59d5f] bg-[#c59d5f]/5 shadow-sm' : 'border-gray-300 hover:border-gray-400'"
 								@click="method = 'Bank'; paymentMethodError = false; showShippingDetails = false">
@@ -151,7 +160,7 @@
 								<img src="/images/gcash.png" alt="GCash" class="h-5">
 								<span class="text-sm font-medium" :class="method === 'GCash' ? 'text-[#c59d5f]' : 'text-gray-700'">GCash</span>
 							</label>
-							@if(!$requires50PercentUpfront)
+							@if(!$requires50PercentUpfront && !$isBackorderCheckout)
 							<label class="flex items-center justify-center gap-2 border-2 rounded-md p-4 cursor-pointer transition-all duration-200" 
 								:class="method === 'COD' ? 'border-[#c59d5f] bg-[#c59d5f]/5 shadow-sm' : 'border-gray-300 hover:border-gray-400'"
 								@click="method = 'COD'; paymentMethodError = false; showShippingDetails = true">
