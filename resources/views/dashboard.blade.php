@@ -191,6 +191,7 @@ use Illuminate\Support\Facades\DB;
                     </div>
 
                     @php
+                        // Use Alpine.js reactive month/year, fallback to current month/year
                         $month = now()->month;
                         $year = now()->year;
                         $firstDay = \Carbon\Carbon::createFromDate($year, $month, 1);
@@ -198,36 +199,75 @@ use Illuminate\Support\Facades\DB;
                         $startDate = $firstDay->copy()->startOfWeek();
                         $endDate = $lastDay->copy()->endOfWeek();
 
-                        // Get events for current month
-                        $restockDates = \App\Models\Order::whereBetween('expected_restock_date', [$firstDay, $lastDay])
+                        // Get events for current month - use actual dates, not calculated dates
+                        $restockDates = \App\Models\Order::whereNotNull('expected_restock_date')
                             ->where('order_type', 'backorder')
-                            ->where('expected_restock_date', '!=', null)
-                            ->selectRaw("DATE(expected_restock_date) as date, COUNT(*) as count")
-                            ->groupBy('date')
+                            ->whereYear('expected_restock_date', $year)
+                            ->whereMonth('expected_restock_date', $month)
                             ->get()
-                            ->keyBy('date');
+                            ->groupBy(function($order) {
+                                return \Carbon\Carbon::parse($order->expected_restock_date)->format('Y-m-d');
+                            })
+                            ->map(function($group) {
+                                return (object)['count' => $group->count()];
+                            });
 
-                        $orderDeadlines = \App\Models\Order::whereBetween('created_at', [$firstDay, $lastDay])
-                            ->whereIn('status', ['pending', 'processing'])
-                            ->selectRaw("DATE(DATE_ADD(created_at, INTERVAL 3 DAY)) as deadline_date, COUNT(*) as count")
-                            ->groupBy('deadline_date')
+                        $orderDeadlines = \App\Models\Order::whereIn('status', ['pending', 'processing'])
+                            ->whereYear('created_at', $year)
+                            ->whereMonth('created_at', $month)
                             ->get()
-                            ->keyBy('deadline_date');
+                            ->groupBy(function($order) {
+                                return \Carbon\Carbon::parse($order->created_at)->addDays(3)->format('Y-m-d');
+                            })
+                            ->map(function($group) {
+                                return (object)['count' => $group->count()];
+                            });
 
-                        $customOrderDates = DB::table('custom_orders')
-                            ->whereBetween('created_at', [$firstDay, $lastDay])
-                            ->selectRaw("DATE(created_at) as date, COUNT(*) as count")
-                            ->groupBy('date')
-                            ->get()
-                            ->keyBy('date');
+                        // Custom order dates - include estimated completion dates
+                        $customOrderDates = collect();
+                        $customOrders = DB::table('custom_orders')
+                            ->where(function($query) use ($year, $month) {
+                                $query->where(function($q) use ($year, $month) {
+                                    $q->whereYear('created_at', $year)
+                                      ->whereMonth('created_at', $month);
+                                })->orWhere(function($q) use ($year, $month) {
+                                    $q->whereNotNull('estimated_completion_date')
+                                      ->whereYear('estimated_completion_date', $year)
+                                      ->whereMonth('estimated_completion_date', $month);
+                                });
+                            })
+                            ->get();
+                        
+                        foreach ($customOrders as $order) {
+                            // Add creation date
+                            if ($order->created_at) {
+                                $dateKey = \Carbon\Carbon::parse($order->created_at)->format('Y-m-d');
+                                if (!isset($customOrderDates[$dateKey])) {
+                                    $customOrderDates[$dateKey] = (object)['count' => 0];
+                                }
+                                $customOrderDates[$dateKey]->count++;
+                            }
+                            // Add estimated completion date (if different from creation date)
+                            if ($order->estimated_completion_date) {
+                                $dateKey = \Carbon\Carbon::parse($order->estimated_completion_date)->format('Y-m-d');
+                                if (!isset($customOrderDates[$dateKey])) {
+                                    $customOrderDates[$dateKey] = (object)['count' => 0];
+                                }
+                                $customOrderDates[$dateKey]->count++;
+                            }
+                        }
 
-                        $deliveries = \App\Models\Order::whereBetween('created_at', [$firstDay, $lastDay])
-                            ->where('status', 'shipped')
-                            ->where('delivered_at', null)
-                            ->selectRaw("DATE(DATE_ADD(created_at, INTERVAL 3 DAY)) as delivery_date, COUNT(*) as count")
-                            ->groupBy('delivery_date')
+                        $deliveries = \App\Models\Order::where('status', 'shipped')
+                            ->whereNull('delivered_at')
+                            ->whereYear('created_at', $year)
+                            ->whereMonth('created_at', $month)
                             ->get()
-                            ->keyBy('delivery_date');
+                            ->groupBy(function($order) {
+                                return \Carbon\Carbon::parse($order->created_at)->addDays(3)->format('Y-m-d');
+                            })
+                            ->map(function($group) {
+                                return (object)['count' => $group->count()];
+                            });
 
                         $events = [
                             'restock' => $restockDates,
@@ -238,40 +278,51 @@ use Illuminate\Support\Facades\DB;
                     @endphp
 
                     <div class="grid grid-cols-7 gap-1">
-                        @for($date = $startDate; $date <= $endDate; $date->addDay())
+                        @php
+                            $currentDate = $startDate->copy();
+                        @endphp
+                        @while($currentDate <= $endDate)
                             @php
-                                $dateString = $date->format('Y-m-d');
+                                $dateString = $currentDate->format('Y-m-d');
                                 $restockCount = $events['restock'][$dateString]->count ?? 0;
                                 $deadlineCount = $events['deadlines'][$dateString]->count ?? 0;
                                 $customCount = $events['customs'][$dateString]->count ?? 0;
                                 $deliveryCount = $events['deliveries'][$dateString]->count ?? 0;
                                 $totalEvents = $restockCount + $deadlineCount + $customCount + $deliveryCount;
                                 $hasEvent = $totalEvents > 0;
+                                $isCurrentMonth = $currentDate->month == $month;
+                                $isToday = $currentDate->isToday();
                             @endphp
                             <div class="h-12 flex flex-col items-center justify-start text-xs border rounded p-0.5
-                                {{ $date->month != $month ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-700' }}
-                                {{ $date->isToday() ? 'bg-[#c49b6e] text-white font-bold ring-2 ring-[#b08a5c]' : '' }}
+                                {{ !$isCurrentMonth ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-700' }}
+                                {{ $isToday ? 'bg-[#c49b6e] text-white font-bold ring-2 ring-[#b08a5c]' : '' }}
                                 {{ $hasEvent ? 'border-[#c49b6e] border-2' : '' }}"
-                                title="{{ $hasEvent ? "📦: $restockCount | ⏰: $deadlineCount | ✏️: $customCount | 🚚: $deliveryCount" : '' }}">
-                                <div class="font-semibold">{{ $date->day }}</div>
+                                title="{{ $hasEvent ? "📦 Restock: $restockCount | ⏰ Deadline: $deadlineCount | ✏️ Custom: $customCount | 🚚 Delivery: $deliveryCount" : '' }}">
+                                <div class="font-semibold">{{ $currentDate->day }}</div>
                                 @if($hasEvent)
                                     <div class="flex flex-wrap gap-0.5 mt-0.5 justify-center w-full">
                                         @if($restockCount > 0)
-                                            <span class="w-1 h-1 bg-purple-500 rounded-full"></span>
+                                            <span class="w-1.5 h-1.5 bg-purple-500 rounded-full" title="Restock: {{ $restockCount }}"></span>
                                         @endif
                                         @if($deadlineCount > 0)
-                                            <span class="w-1 h-1 bg-orange-500 rounded-full"></span>
+                                            <span class="w-1.5 h-1.5 bg-orange-500 rounded-full" title="Deadline: {{ $deadlineCount }}"></span>
                                         @endif
                                         @if($customCount > 0)
-                                            <span class="w-1 h-1 bg-pink-500 rounded-full"></span>
+                                            <span class="w-1.5 h-1.5 bg-pink-500 rounded-full" title="Custom Order: {{ $customCount }}"></span>
                                         @endif
                                         @if($deliveryCount > 0)
-                                            <span class="w-1 h-1 bg-green-500 rounded-full"></span>
+                                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full" title="Delivery: {{ $deliveryCount }}"></span>
                                         @endif
                                     </div>
+                                    @if($totalEvents > 0)
+                                        <div class="text-[10px] font-medium text-[#c49b6e] mt-0.5">{{ $totalEvents }}</div>
+                                    @endif
                                 @endif
                             </div>
-                        @endfor
+                            @php
+                                $currentDate->addDay();
+                            @endphp
+                        @endwhile
                     </div>
 
                     <!-- Event Legend -->

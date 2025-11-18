@@ -484,6 +484,8 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                                     $isOrderCompleted = in_array($orderStatus, ['delivered', 'completed']);
                                     $isOrderShipped = in_array($orderStatus, ['shipped', 'delivered', 'completed']);
                                     $isOrderInProduction = in_array($orderStatus, ['in_production', 'ready_for_delivery', 'ready_to_ship', 'shipped', 'delivered', 'completed']);
+                                    // Check if first payment (50%) has been verified - if so, hide checkout button
+                                    $hasFirstPaymentVerified = $customOrder->order && $customOrder->order->hasVerifiedPayment();
                                 @endphp
                                 @if($customOrder->order && $customOrder->order->isFullyPaid())
                                     @if($isOrderCompleted)
@@ -527,6 +529,19 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
                                             <p class="mt-2 text-xs text-green-700">Your payment has been completed. Production will begin soon.</p>
                                         </div>
                                     @endif
+                                @elseif($hasFirstPaymentVerified)
+                                    <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                        <div class="flex items-center gap-2">
+                                            <svg class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                            </svg>
+                                            <span class="text-sm font-medium text-blue-800">First Payment Verified</span>
+                                        </div>
+                                        <p class="mt-2 text-xs text-blue-700">Your 50% down payment has been verified. The remaining balance will be collected by the courier upon delivery.</p>
+                                        @if($customOrder->order->remaining_balance > 0)
+                                            <p class="mt-2 text-sm font-semibold text-blue-900">Remaining Balance: ₱{{ number_format($customOrder->order->remaining_balance, 2) }}</p>
+                                        @endif
+                                    </div>
                                 @else
                                     <p class="mt-3 text-sm text-gray-700">Your custom order has been confirmed. Please complete payment to begin production.</p>
                                     <div class="mt-4">
@@ -955,6 +970,8 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 									$paymentStatus = $latestPayment?->status ?? $order->payment_status ?? '—';
 									$isRejected = $latestPayment && $latestPayment->isRejected();
 									$isPendingVerification = $latestPayment && $latestPayment->isPendingVerification();
+									$hasFinalPaymentVerified = $order->final_payment_verified ?? false;
+									$hasRemainingBalance = ($order->remaining_balance ?? 0) > 0;
 									
 									// Check order payment status for rejection
 									if ($order->payment_status === 'payment_rejected' || $isRejected) {
@@ -975,20 +992,32 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 											$statusBadgeClass = 'bg-purple-100 text-purple-800';
 											$statusLabel = 'Refunded';
 										} else {
-											$statusBadgeClass = match($paymentStatus) {
-												'paid' => 'bg-green-100 text-green-800',
-												'pending_verification' => 'bg-yellow-100 text-yellow-800',
-												'pending_cod' => 'bg-blue-100 text-blue-800',
-												'unpaid' => 'bg-red-100 text-red-800',
-												default => 'bg-gray-100 text-gray-800',
-											};
-											$statusLabel = match($paymentStatus) {
-												'paid' => 'Paid ✓',
-												'pending_verification' => 'Pending Verification',
-												'pending_cod' => 'Pending COD',
-												'unpaid' => 'Unpaid',
-												default => ucfirst(str_replace('_', ' ', $paymentStatus)),
-											};
+											// Handle final payment verification status
+											if ($hasFinalPaymentVerified && $order->payment_status === 'paid') {
+												$statusBadgeClass = 'bg-green-100 text-green-800';
+												$statusLabel = 'Fully Paid ✓';
+											} elseif ($order->payment_status === 'partially_paid' && $hasFinalPaymentVerified) {
+												$statusBadgeClass = 'bg-green-100 text-green-800';
+												$statusLabel = 'Fully Paid ✓';
+											} elseif ($order->payment_status === 'partially_paid') {
+												$statusBadgeClass = 'bg-blue-100 text-blue-800';
+												$statusLabel = 'Partially Paid (50% Down)';
+											} else {
+												$statusBadgeClass = match($paymentStatus) {
+													'paid' => 'bg-green-100 text-green-800',
+													'pending_verification' => 'bg-yellow-100 text-yellow-800',
+													'pending_cod' => 'bg-blue-100 text-blue-800',
+													'unpaid' => 'bg-red-100 text-red-800',
+													default => 'bg-gray-100 text-gray-800',
+												};
+												$statusLabel = match($paymentStatus) {
+													'paid' => 'Paid ✓',
+													'pending_verification' => 'Pending Verification',
+													'pending_cod' => 'Pending COD',
+													'unpaid' => 'Unpaid',
+													default => ucfirst(str_replace('_', ' ', $paymentStatus)),
+												};
+											}
 										}
 									}
 								@endphp
@@ -1058,17 +1087,28 @@ body{font-family:'Poppins','Inter',ui-sans-serif,system-ui;}
 							
 							@php
 								$hasRemainingBalance = ($order->remaining_balance ?? 0) > 0;
+								$hasFinalPaymentVerified = $order->final_payment_verified ?? false;
 								$requires50PercentUpfront = $order->order_type === 'backorder' || $order->order_type === 'custom' || ($order->order_type === 'mixed' && $hasRemainingBalance);
 							@endphp
 							@if($hasRemainingBalance && $requires50PercentUpfront)
 								<div class="pt-3 border-t mt-3 space-y-2">
-									<div class="flex justify-between items-center bg-blue-50 p-3 rounded border border-blue-200">
-										<div>
-											<span class="text-sm font-medium text-blue-900">Remaining Balance</span>
-											<p class="text-xs text-blue-700 italic mt-1">To be collected by courier</p>
+									@if($hasFinalPaymentVerified)
+										<div class="flex justify-between items-center bg-green-50 p-3 rounded border border-green-200">
+											<div>
+												<span class="text-sm font-medium text-green-900">Final Payment Verified ✓</span>
+												<p class="text-xs text-green-700 italic mt-1">Remaining balance has been collected</p>
+											</div>
+											<span class="text-sm font-semibold text-green-900">₱{{ number_format($order->remaining_balance, 2) }}</span>
 										</div>
-										<span class="text-sm font-semibold text-blue-900">₱{{ number_format($order->remaining_balance, 2) }}</span>
-									</div>
+									@else
+										<div class="flex justify-between items-center bg-blue-50 p-3 rounded border border-blue-200">
+											<div>
+												<span class="text-sm font-medium text-blue-900">Remaining Balance</span>
+												<p class="text-xs text-blue-700 italic mt-1">To be collected by courier</p>
+											</div>
+											<span class="text-sm font-semibold text-blue-900">₱{{ number_format($order->remaining_balance, 2) }}</span>
+										</div>
+									@endif
 								</div>
 							@endif
 						</div>

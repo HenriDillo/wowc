@@ -167,9 +167,15 @@ class CheckoutController extends Controller
             // Check if this requires 50% upfront (Backorder, Custom Order, or Mixed Order with Standard + Backorder)
             $requires50PercentUpfront = $backorderItems->isNotEmpty() || $isMixedOrder;
             
-            // Reject COD for 50% upfront orders
-            if ($requires50PercentUpfront && $validated['payment_method'] === 'COD') {
-                return back()->withErrors(['payment_method' => 'COD is not available for Backorder, Custom Order, or Mixed Order (Standard + Backorder). Please use Bank Transfer or GCash.'])->withInput();
+            // Reject COD for backorder checkouts (including backorder part of mixed orders)
+            // For backorders: COD is completely disabled, only Bank Transfer and GCash allowed
+            if ($backorderItems->isNotEmpty() && $validated['payment_method'] === 'COD') {
+                return back()->withErrors(['payment_method' => 'COD is not available for Backorder checkouts. Please use Bank Transfer or GCash.'])->withInput();
+            }
+            
+            // For mixed orders with backorder items, also reject COD
+            if ($isMixedOrder && $backorderItems->isNotEmpty() && $validated['payment_method'] === 'COD') {
+                return back()->withErrors(['payment_method' => 'COD is not available for orders containing backorder items. Please use Bank Transfer or GCash.'])->withInput();
             }
         }
         

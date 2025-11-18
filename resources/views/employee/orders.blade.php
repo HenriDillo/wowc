@@ -4,6 +4,11 @@
 
 @section('content')
 
+@php
+// Ensure $items is available for the Add Order modal (fallback if controller didn't provide it)
+$items = $items ?? \App\Models\Item::select('id','name','stock','price')->get();
+@endphp
+
     <div class="space-y-4" x-data="ordersPage()" x-init="init()">
         <div class="flex items-center justify-between">
             <h1 class="text-2xl font-semibold text-gray-900">Order Management</h1>
@@ -252,17 +257,16 @@
                                     <span class="inline-flex px-2 py-0.5 rounded text-xs capitalize {{ $childStatusColor }}">{{ $childOrder->status }}</span>
                                 </div>
                                 <div class="col-span-6 md:col-span-1 mt-2 md:mt-0">
-                                    <span class="inline-flex px-2 py-0.5 rounded text-xs 
-                                        @php
-                                            $childPaymentStatus = $childOrder->payment_status ?? 'unpaid';
-                                            echo match($childPaymentStatus) {
-                                                'paid' => 'bg-green-100 text-green-800',
-                                                'partially_paid' => 'bg-blue-100 text-blue-800',
-                                                default => 'bg-red-100 text-red-800'
-                                            };
-                                        @endphp">
-                                        {{ ucfirst($childPaymentStatus) }}
-                                    </span>
+                                    @php
+                                        $childPaymentStatus = $childOrder->payment_status ?? 'unpaid';
+                                        $childPaymentClasses = [
+                                            'paid' => 'bg-green-100 text-green-800',
+                                            'partially_paid' => 'bg-blue-100 text-blue-800',
+                                            'unpaid' => 'bg-red-100 text-red-800',
+                                        ];
+                                        $childPaymentClass = $childPaymentClasses[$childPaymentStatus] ?? 'bg-red-100 text-red-800';
+                                    @endphp
+                                    <span class="inline-flex px-2 py-0.5 rounded text-xs {{ $childPaymentClass }}">{{ ucfirst($childPaymentStatus) }}</span>
                                 </div>
                                 <div class="col-span-6 md:col-span-2 mt-2 md:mt-0"></div>
                                 <div class="col-span-6 md:col-span-1 mt-2 md:mt-0 font-medium text-purple-700">₱{{ number_format($childOrder->total_amount ?? 0, 2) }}</div>
@@ -285,15 +289,7 @@
     </script>
     <!-- Add Order Modal -->
     <x-modal name="add-order" maxWidth="2xl" focusable>
-        <div x-data="{
-            rows: [{item_id: '', quantity: 1}],
-            items: @js($items ?? []),
-            users: @js($users ?? []),
-            errors: @js($errors->messages() ?? []),
-            hasErrors: @js($errors->any() ?? false),
-            addRow() { this.rows.push({item_id: '', quantity: 1}) },
-            removeRow(i) { if (this.rows.length > 1) this.rows.splice(i,1) }
-        }" class="p-6">
+        <div x-data="ordersModal()" x-init="updatePaymentMethod()" class="p-6">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-semibold">Create Order</h2>
                 <button type="button" class="text-sm text-gray-500" x-on:click="$dispatch('close-modal', 'add-order')">Close</button>
@@ -311,29 +307,120 @@
                 </ul>
             </div>
 
-            <form method="POST" action="{{ route('employee.orders.store') }}" class="space-y-4">
+            <form id="employee-add-order-form" method="POST" action="{{ route('employee.orders.store') }}" enctype="multipart/form-data" class="space-y-4">
                 @csrf
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">
-                            Customer <span class="text-red-600">*</span>
+                <!-- Order Type Selection -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Order Type <span class="text-red-600">*</span>
+                    </label>
+                    <select name="order_type" x-model="orderType" @change="updatePaymentMethod()" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                        <option value="standard">Standard Order</option>
+                        <option value="backorder">Back Order</option>
+                        <option value="custom">Custom Order</option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <span x-show="isStandard()">Standard: 100% payment required, COD available</span>
+                        <span x-show="isBackorder()">Back Order: 50% upfront, remaining via courier, COD not available</span>
+                        <span x-show="isCustom()">Custom Order: 50% upfront, remaining via courier, COD not available</span>
+                    </p>
+                </div>
+
+                <!-- Customer Information Section -->
+                <div class="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-4">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-3">Customer Information</h3>
+                    
+                    <!-- Option to use existing customer or enter new -->
+                    <div class="mb-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" x-model="useExistingCustomer" class="rounded" />
+                            <span class="text-sm font-medium text-gray-700">Use existing customer</span>
                         </label>
-                        <select name="user_id" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                    </div>
+
+                    <!-- Existing Customer Selection -->
+                    <div x-show="useExistingCustomer" x-cloak>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Select Customer <span class="text-red-600">*</span>
+                        </label>
+                        <select name="user_id" :required="useExistingCustomer" class="w-full rounded-lg border {{ $errors->has('user_id') ? 'border-red-500' : 'border-gray-300' }} px-3 py-2 text-sm">
                             <option value="">-- Select a customer --</option>
                             @foreach($users ?? [] as $u)
-                                <option value="{{ $u->id }}">{{ $u->name }} — {{ $u->email }}</option>
+                                <option value="{{ $u->id }}" {{ old('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }} — {{ $u->email }}</option>
                             @endforeach
                         </select>
-                        <p class="text-xs text-gray-500 mt-1">Customer selection is required</p>
+                        @error('user_id')
+                            <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                        @else
+                            <p class="text-xs text-gray-500 mt-1">Select an existing customer from the list</p>
+                        @enderror
                     </div>
+
+                    <!-- New Customer Information -->
+                    <div x-show="!useExistingCustomer" x-cloak class="space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    First Name <span class="text-red-600">*</span>
+                                </label>
+                                <input type="text" name="first_name" value="{{ old('first_name') }}" :required="!useExistingCustomer" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="First Name" />
+                                @error('first_name')
+                                    <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Last Name <span class="text-red-600">*</span>
+                                </label>
+                                <input type="text" name="last_name" value="{{ old('last_name') }}" :required="!useExistingCustomer" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Last Name" />
+                                @error('last_name')
+                                    <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Email <span class="text-red-600">*</span>
+                            </label>
+                            <input type="email" name="email" value="{{ old('email') }}" :required="!useExistingCustomer" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="email@example.com" />
+                            @error('email')
+                                <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Contact Number <span class="text-red-600">*</span>
+                            </label>
+                            <input type="text" name="contact_number" value="{{ old('contact_number') }}" :required="!useExistingCustomer" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="09XXXXXXXXX or +639XXXXXXXXX" />
+                            <p class="text-xs text-gray-500 mt-1">Format: 09XXXXXXXXX or +639XXXXXXXXX</p>
+                            @error('contact_number')
+                                <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Address <span class="text-red-600">*</span>
+                            </label>
+                            <textarea name="address" rows="2" :required="!useExistingCustomer" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Complete address (street, city, province, postal code)">{{ old('address') }}</textarea>
+                            @error('address')
+                                <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Payment Method</label>
                         <select name="payment_method" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
                             <option value="NONE">None</option>
                             <option value="COD">COD</option>
                             <option value="GCASH">GCash</option>
-                            <option value="BANK">Bank</option>
+                            <option value="BANK">Bank Transfer</option>
                         </select>
+                        <p class="text-xs text-amber-600 mt-1" x-show="isBackorder() || isCustom()">
+                            ⚠️ COD is not available for Back Orders and Custom Orders
+                        </p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Shipping Fee</label>
@@ -352,16 +439,96 @@
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
-                    <input type="checkbox" name="paid" value="1" id="paid-checkbox" class="rounded" />
-                    <label for="paid-checkbox" class="text-sm font-medium text-gray-700">Mark order as paid (payment received)</label>
+                <!-- Payment Status Selector -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Payment Status <span class="text-red-600">*</span>
+                    </label>
+                    <select name="payment_status" x-model="paymentStatus" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                        <option value="unpaid">Pending Payment</option>
+                        <option value="partially_paid" x-show="isBackorder() || isCustom()">Partially Paid (50% Down)</option>
+                        <option value="paid" x-show="isStandard()">Fully Paid</option>
+                        <option value="pending_cod" x-show="isStandard()">Pending COD</option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <span x-show="isStandard()">Standard orders require 100% payment upfront</span>
+                        <span x-show="isBackorder()">Back orders: Select "Partially Paid" if 50% down payment received</span>
+                        <span x-show="isCustom()">Custom orders: Select "Partially Paid" if 50% down payment received (after quotation)</span>
+                    </p>
                 </div>
 
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-sm font-medium">Items <span class="text-gray-500 text-xs">(System will auto-detect backorder if stock insufficient)</span></h3>
-                        <button type="button" class="text-sm text-[#c49b6e]" x-on:click.prevent="addRow()">+ Add item</button>
+                <!-- Custom Order Fields -->
+                <div x-show="isCustom()" x-cloak class="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-4">
+                    <h3 class="text-sm font-semibold text-purple-900 mb-3">Custom Order Details</h3>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                            Product Name/Title <span class="text-red-600">*</span>
+                        </label>
+                        <input type="text" name="custom_name" x-model="customName" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Enter product name or title" />
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                            Description / Special Instructions <span class="text-red-600">*</span>
+                        </label>
+                        <textarea name="custom_description" x-model="customDescription" required rows="4" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Describe your custom order and any special instructions..."></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Quantity <span class="text-red-600">*</span>
+                            </label>
+                            <input type="number" min="1" name="custom_quantity" x-model.number="customQuantity" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Quotation Amount <span class="text-red-600">*</span>
+                            </label>
+                            <input type="number" step="0.01" min="0" name="custom_quotation" x-model.number="customQuotation" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="0.00" />
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                            Estimated Completion Date
+                        </label>
+                        <input type="date" name="estimated_completion_date" x-model="estimatedCompletionDate" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                        <p class="text-xs text-gray-500 mt-1">Optional: Set expected completion date for this custom order</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                            Reference Images (1-4 images) <span class="text-red-600">*</span>
+                        </label>
+                        <input type="file" name="custom_reference_images[]" multiple accept="image/*" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                        <p class="text-xs text-gray-500 mt-1">Upload 1-4 reference images (JPEG, PNG, max 5MB each)</p>
+                    </div>
+                    <!-- Payment Breakdown for Custom Order -->
+                    <div class="p-3 bg-white border border-purple-200 rounded-lg space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-600">Total Quotation:</span>
+                            <span class="font-semibold">₱<span x-text="customQuotation.toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')"></span></span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-600">Required Payment (50%):</span>
+                            <span class="font-semibold text-blue-700">₱<span x-text="calculateRequiredPayment().toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')"></span></span>
+                        </div>
+                        <div class="flex justify-between text-sm border-t pt-2">
+                            <span class="text-gray-600">Remaining Balance:</span>
+                            <span class="font-semibold text-amber-700">₱<span x-text="calculateRemainingBalance().toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')"></span></span>
+                        </div>
+                        <p class="text-xs text-gray-500 italic mt-1">Remaining balance will be collected by courier upon delivery</p>
+                    </div>
+                </div>
+
+                <!-- Standard/Backorder Items Section -->
+                <div x-show="!isCustom()" x-cloak>
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-sm font-medium">
+                                Items 
+                                <span class="text-gray-500 text-xs" x-show="isStandard()">(System will auto-detect backorder if stock insufficient)</span>
+                                <span class="text-gray-500 text-xs" x-show="isBackorder()">(Back order items - stock will be allocated when available)</span>
+                            </h3>
+                            <button type="button" class="text-sm text-[#c49b6e]" x-on:click.prevent="addRow()">+ Add item</button>
+                        </div>
 
                     <template x-for="(row, index) in rows" :key="index">
                         <div class="grid grid-cols-12 gap-2 items-start mb-3 p-2 rounded-lg bg-gray-50 border border-gray-200">
@@ -369,7 +536,7 @@
                                 <label class="block text-xs font-medium text-gray-600 mb-1">Item</label>
                                 <select :name="`items[${index}][item_id]`" x-model="row.item_id" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
                                     <option value="">-- Select item --</option>
-                                    <template x-for="it in items" :key="it.id">
+                                        <template x-for="it in filteredItems" :key="it.id">
                                         <option :value="it.id" :selected="row.item_id == it.id">
                                             <span x-text="it.name + ' (' + (it.stock ?? 0) + ' in stock, ₱' + (it.price ?? 0) + ')'"></span>
                                         </option>
@@ -379,22 +546,234 @@
                             </div>
                             <div class="col-span-3">
                                 <label class="block text-xs font-medium text-gray-600 mb-1">Qty</label>
-                                <input type="number" min="1" :name="`items[${index}][quantity]`" x-model.number="row.quantity" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                                <input type="number" min="1" :name="`items[${index}][quantity]`" x-model.number="row.quantity" :max="isStandard() ? ( (items.find(i=>i.id==row.item_id)?.stock) || null ) : null" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
                             </div>
                             <div class="col-span-2 flex items-end justify-end">
                                 <button type="button" x-on:click.prevent="removeRow(index)" class="text-sm text-red-600 hover:text-red-800 font-medium">✕ Remove</button>
                             </div>
                         </div>
                     </template>
+                    </div>
+
+                    <!-- Order Summary & Payment Breakdown -->
+                    <div class="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
+                        <h4 class="text-sm font-semibold text-gray-900 mb-3">Order Summary</h4>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-600">Subtotal:</span>
+                            <span class="font-semibold">₱<span x-text="calculateSubtotal().toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')"></span></span>
+                        </div>
+                        <div x-show="isBackorder()" class="space-y-2 pt-2 border-t">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-gray-600">Required Payment (50%):</span>
+                                <span class="font-semibold text-blue-700">₱<span x-text="calculateRequiredPayment().toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')"></span></span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-gray-600">Remaining Balance:</span>
+                                <span class="font-semibold text-amber-700">₱<span x-text="calculateRemainingBalance().toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')"></span></span>
+                            </div>
+                            <p class="text-xs text-gray-500 italic">Remaining balance will be collected by courier</p>
+                        </div>
+                        <div x-show="isStandard()" class="pt-2 border-t">
+                            <div class="flex justify-between text-sm font-semibold">
+                                <span class="text-gray-900">Total Amount:</span>
+                                <span class="text-gray-900">₱<span x-text="calculateSubtotal().toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')"></span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Backorder Specific Fields -->
+                    <div x-show="isBackorder()" class="mt-4 space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Expected Arrival Date
+                            </label>
+                            <input type="date" name="expected_restock_date" x-model="expectedRestockDate" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                            <p class="text-xs text-gray-500 mt-1">Optional: Set expected restock/arrival date for backorder items</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payment Info Notice -->
+                <div x-show="isBackorder() || isCustom()" x-cloak class="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p class="text-xs text-amber-800">
+                        <strong>Payment Information:</strong> 
+                        <span x-show="isBackorder()">This back order requires 50% upfront payment. The remaining 50% will be collected by LBC courier upon delivery.</span>
+                        <span x-show="isCustom()">This custom order requires 50% upfront payment. The remaining 50% will be collected by LBC courier upon delivery.</span>
+                    </p>
+                    <p class="text-xs text-amber-700 mt-1 italic">
+                        <strong>Note:</strong> Remaining balance will be collected by LBC courier upon delivery.
+                    </p>
                 </div>
 
                 <div class="flex items-center gap-2 justify-end">
-                    <button type="submit" class="px-4 py-2 rounded-lg bg-[#c49b6e] text-white font-medium">Create Order</button>
+                    <button type="button" onclick="document.getElementById('employee-add-order-form').submit();" class="px-4 py-2 rounded-lg bg-[#c49b6e] text-white font-medium">Create Order</button>
                     <button type="button" class="px-4 py-2 rounded-lg border" x-on:click="$dispatch('close-modal', 'add-order')">Cancel</button>
                 </div>
             </form>
         </div>
     </x-modal>
+
+    <script>
+        function ordersModal() {
+            const items = @js($items ?? []);
+            const users = @js($users ?? []);
+            const errors = @js($errors->messages() ?? []);
+            const hasErrors = @js($errors->any() ?? false);
+
+            return {
+                rows: [{item_id: '', quantity: 1}],
+                items: items,
+                users: users,
+                errors: errors,
+                hasErrors: hasErrors,
+                orderType: 'standard',
+                paymentStatus: 'unpaid',
+                useExistingCustomer: false,
+                customName: '',
+                customDescription: '',
+                customQuantity: 1,
+                customQuotation: 0,
+                customReferenceImages: [],
+                expectedRestockDate: '',
+                estimatedCompletionDate: '',
+                addRow() { this.rows.push({item_id: '', quantity: 1}) },
+                removeRow(i) { if (this.rows.length > 1) this.rows.splice(i,1) },
+                isBackorder() { return this.orderType === 'backorder'; },
+                isCustom() { return this.orderType === 'custom'; },
+                isStandard() { return this.orderType === 'standard'; },
+                calculateSubtotal() {
+                    let total = 0;
+                    this.rows.forEach(row => {
+                        if (row.item_id && row.quantity) {
+                            const item = this.items.find(i => i.id == row.item_id);
+                            if (item) {
+                                total += (parseFloat(item.price || 0) * parseInt(row.quantity || 0));
+                            }
+                        }
+                    });
+                    return total;
+                },
+                calculateRequiredPayment() {
+                    if (this.isStandard()) {
+                        return this.calculateSubtotal();
+                    } else if (this.isBackorder() || this.isCustom()) {
+                        if (this.isCustom()) {
+                            return parseFloat(this.customQuotation || 0) * 0.5;
+                        }
+                        return this.calculateSubtotal() * 0.5;
+                    }
+                    return 0;
+                },
+                calculateRemainingBalance() {
+                    if (this.isStandard()) {
+                        return 0;
+                    } else if (this.isBackorder()) {
+                        return this.calculateSubtotal() * 0.5;
+                    } else if (this.isCustom()) {
+                        return parseFloat(this.customQuotation || 0) * 0.5;
+                    }
+                    return 0;
+                },
+                updatePaymentMethod() {
+                    const paymentSelect = document.querySelector('select[name="payment_method"]');
+                    if (paymentSelect) {
+                        if (this.isBackorder() || this.isCustom()) {
+                            Array.from(paymentSelect.options).forEach(opt => {
+                                if (opt.value === 'COD') {
+                                    opt.disabled = true;
+                                    if (opt.selected) paymentSelect.value = 'NONE';
+                                } else {
+                                    opt.disabled = false;
+                                }
+                            });
+                        } else {
+                            Array.from(paymentSelect.options).forEach(opt => {
+                                opt.disabled = false;
+                            });
+                        }
+                    }
+                }
+                ,
+                get filteredItems() {
+                    // Standard: show items with stock > 0
+                    // Backorder: show items with stock <= 0 (out of stock)
+                    try {
+                        if (this.isStandard()) {
+                            return this.items.filter(i => (Number(i.stock) || 0) > 0);
+                        }
+                        if (this.isBackorder()) {
+                            return this.items.filter(i => (Number(i.stock) || 0) <= 0);
+                        }
+                        // default: show all
+                        return this.items;
+                    } catch (e) {
+                        return this.items;
+                    }
+                }
+            };
+        }
+    </script>
+
+    <script>
+        // Ensure the Add Order form submits even if a JS handler elsewhere prevents default.
+        (function(){
+            const form = document.getElementById('employee-add-order-form');
+            if (!form) return;
+
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const submitBtn = form.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.disabled = true;
+
+                const fd = new FormData(form);
+                try {
+                    const res = await fetch(form.action, {
+                        method: 'POST',
+                        body: fd,
+                        credentials: 'same-origin',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    if (res.redirected) {
+                        // Laravel redirect - follow it
+                        window.location.href = res.url;
+                        return;
+                    }
+
+                    if (res.status === 200 || res.status === 201) {
+                        // success - reload so order list reflects change
+                        window.location.reload();
+                        return;
+                    }
+
+                    if (res.status === 422) {
+                        const data = await res.json().catch(()=>null);
+                        let msgs = [];
+                        if (data && data.errors) {
+                            Object.values(data.errors).forEach(arr => msgs.push(...arr));
+                        }
+                        if (msgs.length === 0) msgs.push('Validation failed.');
+                        alert(msgs.join('\n'));
+                        if (submitBtn) submitBtn.disabled = false;
+                        return;
+                    }
+
+                    // unexpected error
+                    const text = await res.text().catch(()=>null);
+                    console.error('Add order error', res.status, text);
+                    alert('An error occurred while creating the order. Check server logs.');
+                    if (submitBtn) submitBtn.disabled = false;
+                } catch (err) {
+                    console.error(err);
+                    alert('Network error while creating order.');
+                    if (submitBtn) submitBtn.disabled = false;
+                }
+            });
+        })();
+    </script>
+
     @endpush
 
 @endsection

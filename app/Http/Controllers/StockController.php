@@ -60,56 +60,9 @@ class StockController extends Controller
         \DB::transaction(function () use ($item, $added) {
             $item->increment('stock', $added);
 
-            // Re-load to get updated stock
-            $item->refresh();
-            $available = (int) $item->stock;
-
-            if ($available <= 0) {
-                return;
-            }
-
-            // Find pending backorder order items (FIFO)
-            $pending = \App\Models\OrderItem::where('item_id', $item->id)
-                ->where('is_backorder', true)
-                ->where('backorder_status', \App\Models\OrderItem::BO_PENDING)
-                ->orderBy('created_at')
-                ->get();
-
-            foreach ($pending as $oi) {
-                if ($available <= 0) break;
-
-                if ($oi->quantity <= $available) {
-                    // We can fulfill this order item now
-                    $oi->backorder_status = \App\Models\OrderItem::BO_IN_PROGRESS;
-                    $oi->save();
-
-                    // Log stock transaction for backorder fulfillment
-                    ItemStockTransaction::create([
-                        'item_id' => $item->id,
-                        'user_id' => Auth::id(),
-                        'type' => 'out',
-                        'quantity' => $oi->quantity,
-                        'remarks' => "Backorder fulfillment - Order #{$oi->order_id}, OrderItem #{$oi->id}",
-                    ]);
-
-                    // Notify customer that their backorder is now ready for fulfillment
-                    try {
-                        $oi->loadMissing('order.user');
-                        if ($oi->order && $oi->order->user && $oi->order->user->email) {
-                            \Mail::to($oi->order->user->email)->send(new \App\Mail\BackorderReady($oi));
-                        }
-                    } catch (\Throwable $e) {
-                        // swallow mail errors but log them
-                        \Log::error('Failed to send backorder ready email', ['error' => $e->getMessage(), 'order_item_id' => $oi->id]);
-                    }
-
-                    $available -= $oi->quantity;
-                }
-            }
-
-            // Persist remaining stock
-            $item->stock = $available;
-            $item->save();
+            // NOTE: Stock is NOT auto-reduced when restocking for backorders.
+            // Stock will only be reduced when the backorder status is updated to "ready_to_ship" (Preparing to Ship).
+            // This allows stock to be available for other orders until the backorder is actually ready to ship.
         });
 
         return back()->with('status', 'Item stock updated and backorders allocated');
